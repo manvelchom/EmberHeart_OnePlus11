@@ -1,4 +1,4 @@
-name: Build OnePlus kernel modules
+        ../vendor/qcom/opensource/wname: Build OnePlus kernel modules
 
 permissions:
   contents: write
@@ -290,36 +290,15 @@ runs:
           --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E \
-          --module CONFIG_MT7921S \
-          --module CONFIG_MT7921U 
-          
+          --module CONFIG_MT7921E
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-    - name: Replace mt76 with OnePlus sm8650 version
-      shell: bash
-      run: |
-        set -euo pipefail
-        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-        MT76_PATH="$MSM/drivers/net/wireless/mediatek/mt76"
-        TEMP_DIR="$GITHUB_WORKSPACE/mt76_new"
-    
-        echo "==> Cloning OnePlus sm8650 kernel common repo (mediatek subtree) ..."
-        git clone --no-checkout https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650.git "$TEMP_DIR"
-        cd "$TEMP_DIR"
-        git sparse-checkout init --cone
-        git sparse-checkout set drivers/net/wireless/mediatek
-        git checkout oneplus/sm8650_b_16.0.0_oneplus_13r
-    
-        echo "==> Replacing kernel mt76 folder with the new one ..."
-        rm -rf "$MT76_PATH"
-        cp -r drivers/net/wireless/mediatek/mt76 "$MT76_PATH"
-        cd "$MSM"
-        echo "==> Done. mt76 replaced."
+
+          
 
     - name: Add memkernel module
       shell: bash
@@ -432,19 +411,41 @@ runs:
         echo "[+] Verifying binder fix..."
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
-        
-    # ══════════════════════════════════════════════════
-    # rtl8812AU – կլոնավորում (aircrack-ng/rtl8812AU)
-    # ══════════════════════════════════════════════════
-    - name: Clone rtl8812AU (aircrack-ng)
+
+    - name: Replace mt76 with OnePlus sm8650 version
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        DEST="$KERNEL_PLATFORM/../vendor/extra/rtl8812au"
-        mkdir -p "$(dirname "$DEST")"
-        git clone --depth=1 https://github.com/aircrack-ng/rtl8812AU.git "$DEST"
-        rm -rf "$DEST/.git"
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        MT76_PATH="$MSM/drivers/net/wireless/mediatek/mt76"
+        TEMP_DIR="$GITHUB_WORKSPACE/mt76_new"
+
+        echo "==> Cloning OnePlus sm8650 kernel common repo (mediatek subtree) ..."
+        git clone --no-checkout https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650.git "$TEMP_DIR"
+        cd "$TEMP_DIR"
+        git sparse-checkout init --cone
+        git sparse-checkout set drivers/net/wireless/mediatek
+        git checkout oneplus/sm8650_b_16.0.0_oneplus_13r
+
+        echo "==> Replacing kernel mt76 folder with the new one ..."
+        rm -rf "$MT76_PATH"
+        cp -r drivers/net/wireless/mediatek/mt76 "$MT76_PATH"
+        cd "$MSM"
+        echo "==> Done. mt76 replaced."
+
+
+        
+    - name: Add rtw88 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtw88
+        git clone https://github.com/lwfinger/rtw88.git
+        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -562,7 +563,6 @@ runs:
           ../vendor/st/opensource/driver
           ../vendor/st/opensource/eSE-driver
           ../vendor/qcom/opensource/wlan/qcacld-3.0
-          ../vendor/extra/rtl8812au   # ← ավելացված
         )
 
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
@@ -581,12 +581,6 @@ runs:
           if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
             echo "Skipping module without Makefile/Kbuild: $module"
             return 0
-          fi
-
-          # Հատուկ rtl8812au-ի համար
-          if [[ "$module" == *rtl8812au ]]; then
-            export CONFIG_RTL8812AU=m
-            extra_syms+=(KSRC="$MSM" CONFIG_RTL8812AU=m)
           fi
 
           if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
@@ -634,6 +628,7 @@ runs:
         # Download default module list
         curl -L -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
         # Remove modules in the default list
+
         while IFS= read -r module; do
           if [ -e "$module" ]; then
             rm -f "$module"
