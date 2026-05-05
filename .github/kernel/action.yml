@@ -1,4 +1,4 @@
-name: Build Nethunter-ready Kernel (hardcoded)
+name: Build Nethunter-ready Kernel (repo-based)
 
 permissions:
   contents: write
@@ -24,20 +24,35 @@ runs:
       run: |
         CONFIG="OP11R"
         echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
+        REPO="/usr/local/bin/repo"
+        [ -x "$REPO" ] || { curl -s https://storage.googleapis.com/git-repo-downloads/repo -o "$REPO" && chmod +x "$REPO"; }
+        echo "REPO=$REPO" >> "$GITHUB_ENV"
 
-    - name: Initialize and Sync Kernel Source (hardcoded)
+    - name: Initialize and Sync Kernel Source (repo)
       shell: bash
       run: |
-        mkdir -p "$CONFIG/kernel_platform"
-        cd "$CONFIG/kernel_platform"
-        git clone --depth=1 --branch oneplus/sm8475_b_16.0.0_oneplus_11r \
-          https://github.com/docdry0001/android_kernel_common_oneplus_sm8475.git .
+        mkdir -p "$CONFIG"
+        cd "$CONFIG"
+        "$REPO" init \
+          --manifest-url https://github.com/docdry0001/kernel_patches.git \
+          --manifest-branch main \
+          -m kernel_manifest/oneplus_11r_b.xml \
+          --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+        success=false
+        for i in 1 2 3; do
+          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
+             -j"$(nproc --all)" --fail-fast; then
+            success=true; break
+          fi
+          sleep 20
+        done
+        $success || { echo "repo sync failed"; exit 1; }
 
     - name: Get Kernel Version Info
       shell: bash
       run: |
         ANDROID_VERSION="android12"
-        cd "$CONFIG/kernel_platform"
+        cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
         VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
         PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
         FULL_VERSION="$VERSION.$PATCHLEVEL"
@@ -57,7 +72,7 @@ runs:
     - name: Add Nethunter Inline Configs
       shell: bash
       run: |
-        cd "$CONFIG/kernel_platform"
+        cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
         cat >> arch/arm64/configs/gki_defconfig <<-EOF
         	CONFIG_BT_HCIBTUSB=y
         	CONFIG_BT_HCIBTUSB_BCM=y
@@ -81,7 +96,7 @@ runs:
         	CONFIG_USB_SERIAL_PL2303=y
         EOF
 
-    - name: Detect Clang (with fallback)
+    - name: Detect Clang (prebuilts or system)
       shell: bash
       run: |
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
@@ -94,7 +109,6 @@ runs:
             break
           fi
         done
-        # Fallback to system clang
         if [ -z "$CLANG_BIN" ] && command -v clang >/dev/null 2>&1; then
           CLANG_BIN="$(dirname "$(command -v clang)")"
         fi
@@ -108,7 +122,7 @@ runs:
         export CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export CC="ccache clang" HOSTCC="ccache clang" HOSTCXX="ccache clang++"
-        cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
         : > .scmversion
         OUT=out
         mkdir -p "$OUT"
@@ -122,4 +136,4 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: kernel-nethunter-OP11R
-        path: ${{ github.workspace }}/OP11R/kernel_platform/out/arch/arm64/boot/Image
+        path: ${{ github.workspace }}/OP11R/kernel_platform/common/out/arch/arm64/boot/Image
