@@ -54,6 +54,26 @@ runs:
           libxml2-utils rsync unzip dwarves file python3 ccache
         sudo apt-get clean
 
+    - name: Detect Clang
+      shell: bash
+      run: |
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        CLANG_BIN=""
+        for base in "$KERNEL_PLATFORM/prebuilts" "$KERNEL_PLATFORM/prebuilts-master"; do
+          [ -d "$base/clang/host/linux-x86" ] || continue
+          latest=$(ls -d "$base/clang/host/linux-x86/clang-r"* 2>/dev/null | sort -V | tail -n1 || true)
+          if [ -n "$latest" ] && [ -x "$latest/bin/clang" ]; then
+            CLANG_BIN="$latest/bin"
+            break
+          fi
+        done
+        # fallback to system clang if prebuilts not found
+        if [ -z "$CLANG_BIN" ]; then
+          CLANG_BIN="$(dirname "$(command -v clang)")"
+        fi
+        [ -z "${CLANG_BIN:-}" ] && { echo "No clang found"; exit 1; }
+        echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
+
     - name: Add Nethunter Inline Configs
       shell: bash
       run: |
