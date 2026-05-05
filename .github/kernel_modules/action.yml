@@ -59,11 +59,11 @@ runs:
         job-summary: 'CCache stats'
         evict-old-files: 'job'
 
-    - name: Clone kernel patches for msm kernel
-      shell: bash
-      run: |
-        set -euo pipefail
-        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
+    #- name: Clone kernel patches for msm kernel
+      #shell: bash
+      #run: |
+        #set -euo pipefail
+       # git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
 
     - name: Clean Up ABI Protected Exports
       shell: bash
@@ -103,24 +103,10 @@ runs:
           --module CONFIG_MT76x02_LIB --module CONFIG_MT76x02_USB --module CONFIG_MT76_CONNAC_LIB \
           --module CONFIG_MT7603E --module CONFIG_MT76x2_COMMON --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON --module CONFIG_MT7915E --module CONFIG_MT7921E \
+          --module CONFIG_MT7921_COMMON --module CONFIG_MT7921E --module CONFIG_MT7921U \
           --module CONFIG_MAC80211_LEDS --module CONFIG_CAN_SLCAN
 
-    - name: Replace mt76 with docdry0001 sm8475 version
-      shell: bash
-      run: |
-        set -euo pipefail
-        MEDIATEK_PATH="kernel_platform/drivers/net/wireless/mediatek"
-        TEMP_DIR="$GITHUB_WORKSPACE/mediatek_new"
-        git clone --no-checkout https://github.com/docdry0001/android_kernel_common_oneplus_sm8475.git "$TEMP_DIR"
-        cd "$TEMP_DIR"
-        git sparse-checkout init --cone
-        git sparse-checkout set drivers/net/wireless/mediatek
-        git checkout oneplus/sm8475
-        echo "Replacing kernel mediatek folder with the new one..."
-        rm -rf "$MEDIATEK_PATH"
-        cp -r drivers/net/wireless/mediatek "$MEDIATEK_PATH"
-        cd kernel_platform
-        echo "mt76 replaced."
+    
 
     - name: Add memkernel module
       shell: bash
