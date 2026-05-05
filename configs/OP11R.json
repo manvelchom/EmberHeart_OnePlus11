@@ -8,7 +8,7 @@
   "manifest_oos15": "oneplus_11r_v.xml",
   "manifest_oos15_modules": "oneplus_11r_v.xml",
   "manifest_oos16": "oneplus_11r_b.xml",
-  "manifest_oos16_modules": "oneplus_12_b.xml",
+  "manifest_oos16_modules": "oneplus_11r_b.xml",
   "android_version": "android12",
   "kernel_version": "5.10",
   "hmbird": false
