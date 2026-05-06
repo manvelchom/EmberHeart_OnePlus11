@@ -115,38 +115,18 @@ runs:
         git config --global core.fsmonitor true
         git config --global pack.sparse true
 
-    # - name: Initialize and Sync Kernel Source
-    #   shell: bash
-    #   run: |
-    #     mkdir -p "$CONFIG"
-    #     cd "$CONFIG"
-    #     if [[ "$OP_MANIFEST" == https://* ]]; then
-    #       mkdir -p .repo/manifests
-    #       curl --fail --location --proto '=https' "$OP_MANIFEST" -o .repo/manifests/temp_manifest.xml
-    #       "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-    #     else
-    #       "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-    #     fi
-    #     success=false
-    #     for i in 1 2 3; do
-    #       if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
-    #         success=true; break
-    #       fi
-    #       sleep 20
-    #     done
-    #     $success || { echo "repo sync failed"; exit 1; }
-
-      # ⬇️ ՄԻԱԿ ՓՈՓՈԽՎԱԾ STEP-ը
     - name: Initialize and Sync Kernel Source
       shell: bash
       run: |
         mkdir -p "$CONFIG"
         cd "$CONFIG"
-        "$REPO" init \
-          --manifest-url https://github.com/docdry0001/kernel_patches.git \
-          --manifest-branch main \
-          -m kernel_manifest/oneplus_11r_b.xml \
-          --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+        if [[ "$OP_MANIFEST" == https://* ]]; then
+          mkdir -p .repo/manifests
+          curl --fail --location --proto '=https' "$OP_MANIFEST" -o .repo/manifests/temp_manifest.xml
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+        else
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+        fi
         success=false
         for i in 1 2 3; do
           if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
@@ -155,7 +135,6 @@ runs:
           sleep 20
         done
         $success || { echo "repo sync failed"; exit 1; }
-    # ⬆️ Ավարտ
 
     - name: Set Dir Paths
       shell: bash
