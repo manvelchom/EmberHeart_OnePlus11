@@ -131,6 +131,92 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
 
+    # ══════════════════════════════════════════════════════
+    # 1. Clone external Wi-Fi drivers
+    # ══════════════════════════════════════════════════════
+    - name: Clone external Wi-Fi drivers
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_WORKSPACE"
+        mkdir -p external_wifi
+    
+        # aircrack-ng drivers
+        git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git external_wifi/rtl8812au
+        git clone --depth=1 https://github.com/aircrack-ng/rtl8814au.git external_wifi/rtl8814au
+        git clone --depth=1 https://github.com/aircrack-ng/rtl8188eus.git external_wifi/rtl8188eus
+    
+        # morrownr drivers
+        git clone --depth=1 https://github.com/morrownr/88x2bu-20210702.git external_wifi/88x2bu
+        git clone --depth=1 https://github.com/morrownr/mt76.git external_wifi/mt76
+    
+        echo "✅ All external Wi-Fi drivers cloned."
+    
+    # ══════════════════════════════════════════════════════
+    # 2. Build external Wi-Fi modules
+    # ══════════════════════════════════════════════════════
+    - name: Build external Wi-Fi modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
+        KERNEL_OUT="$KERNEL_SRC/out"
+        INSTALL_MOD_PATH="$GITHUB_WORKSPACE/external_modules"
+        mkdir -p "$INSTALL_MOD_PATH"
+    
+        export LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export CC="ccache clang" HOSTCC="ccache clang" HOSTCXX="ccache clang++"
+    
+        # Build each driver
+        for DRIVER_DIR in \
+          "$GITHUB_WORKSPACE/external_wifi/rtl8812au" \
+          "$GITHUB_WORKSPACE/external_wifi/rtl8814au" \
+          "$GITHUB_WORKSPACE/external_wifi/rtl8188eus" \
+          "$GITHUB_WORKSPACE/external_wifi/88x2bu" \
+          "$GITHUB_WORKSPACE/external_wifi/mt76"; do
+    
+          echo "==== Building $(basename "$DRIVER_DIR") ===="
+          cd "$DRIVER_DIR"
+    
+          # 88x2bu uses its own Makefile, others use standard
+          if [ -f Makefile ]; then
+            make -j$(nproc --all) \
+              ARCH=arm64 \
+              CROSS_COMPILE=aarch64-linux-gnu- \
+              KSRC="$KERNEL_SRC" \
+              KERNEL_SRC="$KERNEL_SRC" \
+              KERNEL_PATH="$KERNEL_SRC" \
+              KERNELRELEASE=$(cat "$KERNEL_OUT/include/config/kernel.release" 2>/dev/null || echo "") \
+              modules || echo "⚠️ Build failed for $(basename "$DRIVER_DIR")"
+          else
+            echo "⚠️ No Makefile found in $(basename "$DRIVER_DIR"), skipping."
+          fi
+    
+          # Collect .ko files
+          find . -name '*.ko' -exec cp {} "$INSTALL_MOD_PATH/" \; || true
+        done
+    
+        echo "✅ External Wi-Fi modules built."
+        ls -la "$INSTALL_MOD_PATH"
+    
+    # ══════════════════════════════════════════════════════
+    # 3. Archive external modules
+    # ══════════════════════════════════════════════════════
+    - name: Archive external Wi-Fi modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -d "$GITHUB_WORKSPACE/external_modules" ] && \
+           [ "$(find "$GITHUB_WORKSPACE/external_modules" -name '*.ko' | wc -l)" -gt 0 ]; then
+          cd "$GITHUB_WORKSPACE/external_modules"
+          zip -r "$ARTIFACTS_FOLDER/external-wifi-modules.zip" .
+          echo "✅ External Wi-Fi modules archived: $ARTIFACTS_FOLDER/external-wifi-modules.zip"
+        else
+          echo "⚠️ No external modules found, skipping archive."
+        fi
+
     - name: Upload Artifacts
       if: always()
       uses: actions/upload-artifact@v4
