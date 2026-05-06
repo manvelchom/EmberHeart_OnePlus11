@@ -34,11 +34,6 @@ inputs:
     required: false
     type: string
     default: "EmberHeart"
-  backports_release:
-    description: 'Backports release version'
-    required: false
-    type: string
-    default: backports-6.18
 
 outputs:
   kernel_version:
@@ -476,40 +471,42 @@ runs:
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
-    
-    - name: Archive rtl88xxau module (flat)
+
+    - name: Build External rtl88xxau
       if: success()
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p /tmp/backports-flat
-        if [ -d /tmp/rtl88xxau-ko ]; then
-          cp /tmp/rtl88xxau-ko/*.ko /tmp/backports-flat/
+        RTL_DIR="$GITHUB_WORKSPACE/rtl88xxau"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
+
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
         fi
-        cd /tmp/backports-flat
-        zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
-        echo "rtl88xxau archive created"
-        
-    - name: Archive all modules (flat)
+        export PATH="/usr/lib/ccache:$PATH"
+
+        rm -rf "$RTL_DIR"
+        git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
+        cd "$RTL_DIR"
+
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KSRC="$KERNEL_BUILD" modules -j$(nproc --all)
+
+        mkdir -p /tmp/rtl88xxau-ko
+        find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
+        echo "rtl88xxau built successfully"
+
+    - name: Archive rtl88xxau module
       if: success()
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p /tmp/backports-flat
-
-        # backports .ko files
-        if [ -d "$GITHUB_WORKSPACE/backports-artifacts" ]; then
-          find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
-        fi
-
-        # rtl88xxau .ko files
+        mkdir -p /tmp/rtl88xxau-flat
         if [ -d /tmp/rtl88xxau-ko ]; then
-          cp /tmp/rtl88xxau-ko/*.ko /tmp/backports-flat/
+          cp /tmp/rtl88xxau-ko/*.ko /tmp/rtl88xxau-flat/
         fi
-
-        cd /tmp/backports-flat
-        zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
-        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        cd /tmp/rtl88xxau-flat
+        zip -r "$ARTIFACTS_FOLDER/rtl88xxau-module.zip" .
+        echo "rtl88xxau archive created: $ARTIFACTS_FOLDER/rtl88xxau-module.zip"
 
     - name: Create AnyKernel3 ZIP
       id: create_zip
@@ -549,5 +546,5 @@ runs:
         name: kernel-${{ env.CONFIG }}
         path: |
           ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-          ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+          ${{ env.ARTIFACTS_FOLDER }}/rtl88xxau-module.zip
           ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
