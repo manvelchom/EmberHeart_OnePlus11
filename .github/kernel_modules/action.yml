@@ -454,11 +454,14 @@ runs:
         
     - name: Build External WiFi Driver (RTL8812AU)
       run: |
-        git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git external/rtl8812au
+        curl -L -o rtl8812au.zip https://github.com/aircrack-ng/rtl8812au/archive/refs/heads/master.zip
+        unzip -q rtl8812au.zip -d external/
+        mv external/rtl8812au-master external/rtl8812au
         cd external/rtl8812au
         make ARCH=${{ env.ARCH }} CROSS_COMPILE=${{ env.CROSS_COMPILE }} \
              -C ${{ env.KERNEL_DIR }} O=out M=$PWD modules -j1 V=1
         cd ${{ env.KERNEL_DIR }}
+      
         
     - name: Detect Clang (toolchain for build)
       shell: bash
