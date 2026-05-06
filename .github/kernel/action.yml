@@ -697,27 +697,23 @@ runs:
         fi
         export PATH="/usr/lib/ccache:$PATH"
     
-        # Clone the driver
         git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
         cd "$RTL_DIR"
     
-        # Patch CFI macro (same as backports)
+        # Patch CFI macro (if present)
         FILE="include/linux/module.h"
         if [ -f "$FILE" ]; then
           sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
           sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
-        else
-          echo "::warning::CFI patch skipped: $FILE not found"
         fi
     
-        # Compile
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KSRC="$KERNEL_BUILD" modules -j$(nproc --all)
     
-        # Copy .ko to the staging flat folder
-        mkdir -p /tmp/backports-flat
-        find . -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
-        echo "rtl88xxau .ko added to staging"
-    
+        # Save .ko for later archiving
+        mkdir -p /tmp/rtl88xxau-ko
+        find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
+        echo "rtl88xxau built successfully"
+
     - name: Archive backports modules (flat)
       if: success()
       shell: bash
@@ -731,8 +727,7 @@ runs:
         find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
         cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
-        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
-    
+        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"    
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
