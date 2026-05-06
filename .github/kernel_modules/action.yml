@@ -144,33 +144,54 @@ runs:
         fi
         echo "REPO=$REPO" >> "$GITHUB_ENV"
 
+    # - name: Initialize and Sync Kernel Source
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     echo "Creating folder for configuration: $CONFIG"
+    #     mkdir -p "$CONFIG"
+    #     cd "$CONFIG"
+    #     echo "Initializing and syncing kernel source..."
+    #     if [[ "$MANIFEST" == https://* ]]; then
+    #       mkdir -p .repo/manifests
+    #       curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
+    #       "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+    #     else
+    #       "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+    #     fi
+    #     "$REPO" --version
+    #     success=false
+    #     for i in 1 2 3; do
+    #       if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
+    #          -j"$(nproc --all)" --fail-fast; then
+    #         success=true
+    #         break
+    #       fi
+    #       echo "repo sync attempt $i failed; retrying..."
+    #       sleep 30
+    #     done
+    #     $success || { echo "repo sync failed after 3 attempts"; exit 1; }
+
+      # ⬇️ ՄԻԱԿ ՓՈՓՈԽՎԱԾ STEP-ը
     - name: Initialize and Sync Kernel Source
       shell: bash
       run: |
-        set -euo pipefail
-        echo "Creating folder for configuration: $CONFIG"
         mkdir -p "$CONFIG"
         cd "$CONFIG"
-        echo "Initializing and syncing kernel source..."
-        if [[ "$MANIFEST" == https://* ]]; then
-          mkdir -p .repo/manifests
-          curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-        else
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-        fi
-        "$REPO" --version
+        "$REPO" init \
+          --manifest-url https://github.com/docdry0001/kernel_patches.git \
+          --manifest-branch main \
+          -m kernel_manifest/oneplus_11r_b.xml \
+          --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         success=false
         for i in 1 2 3; do
-          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
-             -j"$(nproc --all)" --fail-fast; then
-            success=true
-            break
+          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
+            success=true; break
           fi
-          echo "repo sync attempt $i failed; retrying..."
-          sleep 30
+          sleep 20
         done
-        $success || { echo "repo sync failed after 3 attempts"; exit 1; }
+        $success || { echo "repo sync failed"; exit 1; }
+      # Ավարտ
 
     - name: Get Kernel Version Info
       shell: bash
