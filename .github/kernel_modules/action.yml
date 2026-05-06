@@ -301,25 +301,32 @@ runs:
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
           --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E
-
-        # Other configs
+          --module CONFIG_MT76_USB=m \
+          --module CONFIG_MT76_PCI=m \
+          --module CONFIG_MT76_SDIO=m \
+          --module CONFIG_MT76_CONNAC_LIB=m \
+          --module CONFIG_MT76x0_COMMON=m \
+          --module CONFIG_MT76x0U=m \
+          --module CONFIG_MT76x0E=m \
+          --module CONFIG_MT76x2_COMMON=m \
+          --module CONFIG_MT76x2U=m \
+          --module CONFIG_MT76x2E=m \
+          --module CONFIG_MT7601U=m \
+          --module CONFIG_MT7603E=m \
+          --module CONFIG_MT7615_COMMON=m \
+          --module CONFIG_MT7615E=m \
+          --module CONFIG_MT7663_USB_SDIO_COMMON=m \
+          --module CONFIG_MT7663U=m \
+          --module CONFIG_MT7663S=m \
+          --module CONFIG_MT7915E=m \
+          --module CONFIG_MT7921_COMMON=m \
+          --module CONFIG_MT7921U=m \
+          --module CONFIG_MT7921S=m \
+          --module CONFIG_MT7921E=m  
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-
-          
 
     - name: Add memkernel module
       shell: bash
