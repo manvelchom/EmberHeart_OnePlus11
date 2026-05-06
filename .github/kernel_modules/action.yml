@@ -452,15 +452,7 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
         
-    - name: Build External WiFi Driver (RTL8812AU)
-      run: |
-        curl -L -o rtl8812au.zip https://github.com/aircrack-ng/rtl8812au/archive/refs/heads/master.zip
-        unzip -q rtl8812au.zip -d external/
-        mv external/rtl8812au-master external/rtl8812au
-        cd external/rtl8812au
-        make ARCH=${{ env.ARCH }} CROSS_COMPILE=${{ env.CROSS_COMPILE }} \
-             -C ${{ env.KERNEL_DIR }} O=out M=$PWD modules -j1 V=1
-        cd ${{ env.KERNEL_DIR }}
+
       
         
     - name: Detect Clang (toolchain for build)
@@ -623,7 +615,78 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-
+        
+    - name: Build External WiFi Driver (RTL8812AU)
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Setup RTL8812AU source"
+    
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        OUT="$MSM/out"
+        DRIVER_DIR="$KERNEL_PLATFORM/../vendor/realtek/opensource/rtl8812au"
+    
+        mkdir -p "$(dirname "$DRIVER_DIR")"
+        cd "$(dirname "$DRIVER_DIR")"
+    
+        if [ -d "$DRIVER_DIR/.git" ]; then
+          echo "RTL8812AU already cloned, pulling latest..."
+          cd "$DRIVER_DIR"
+          git fetch --depth=1 origin master
+          git reset --hard origin/master
+        else
+          echo "Cloning RTL8812AU..."
+          git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git rtl8812au
+          cd "$DRIVER_DIR"
+        fi
+    
+        echo "::endgroup::"
+        echo "::group::Build RTL8812AU module"
+    
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
+    
+        # Reuse the exact same MAKE_FLAGS as our main in-tree/external build
+        MAKE_FLAGS=(
+          -C "$MSM"
+          O="$OUT"
+          M="$(pwd)"
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          DEPMOD=depmod
+          DTC=dtc
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
+          CC="ccache clang"
+        )
+    
+        echo "Building modules..."
+        make "${MAKE_FLAGS[@]}" modules -j"$(nproc --all)" || {
+          echo "ERROR: RTL8812AU build failed"
+          exit 1
+        }
+    
+        echo "Installing modules to $OUT..."
+        make "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$OUT" modules_install || {
+          echo "ERROR: RTL8812AU install failed"
+          exit 1
+        }
+    
+        echo "::endgroup::"
+    
     - name: Filter modules
       shell: bash
       run: |
