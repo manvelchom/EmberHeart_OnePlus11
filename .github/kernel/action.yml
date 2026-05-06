@@ -682,7 +682,36 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
+
         
+    - name: Archive backports modules (flat)
+      if: success()
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p /tmp/backports-flat
+        # backports .ko files
+        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
+        # rtl88xxau .ko (if built)
+        if [ -d "$GITHUB_WORKSPACE/rtl88xxau" ]; then
+          find "$GITHUB_WORKSPACE/rtl88xxau" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
+        fi
+        cd /tmp/backports-flat
+        zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
+        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        
+        # Patch CFI macro (same as backports)
+        FILE="include/linux/module.h"
+        sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+        sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+    
+        # Compile
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KSRC="$KERNEL_BUILD" modules -j$(nproc --all)
+    
+        # Copy .ko to backports flat archive
+        find . -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
+        echo "rtl88xxau .ko added"
+    
     - name: Archive backports modules (flat)
       if: success()
       shell: bash
@@ -697,6 +726,7 @@ runs:
         cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
         echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+    
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
