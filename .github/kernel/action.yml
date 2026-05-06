@@ -683,34 +683,40 @@ runs:
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
 
-        
-    - name: Archive backports modules (flat)
+            
+    - name: Build External rtl88xxau
       if: success()
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p /tmp/backports-flat
-        # backports .ko files
-        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
-        # rtl88xxau .ko (if built)
-        if [ -d "$GITHUB_WORKSPACE/rtl88xxau" ]; then
-          find "$GITHUB_WORKSPACE/rtl88xxau" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
+        RTL_DIR="$GITHUB_WORKSPACE/rtl88xxau"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
+    
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
         fi
-        cd /tmp/backports-flat
-        zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
-        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
-        
+        export PATH="/usr/lib/ccache:$PATH"
+    
+        # Clone the driver
+        git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
+        cd "$RTL_DIR"
+    
         # Patch CFI macro (same as backports)
         FILE="include/linux/module.h"
-        sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
-        sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+        if [ -f "$FILE" ]; then
+          sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+          sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+        else
+          echo "::warning::CFI patch skipped: $FILE not found"
+        fi
     
         # Compile
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KSRC="$KERNEL_BUILD" modules -j$(nproc --all)
     
-        # Copy .ko to backports flat archive
+        # Copy .ko to the staging flat folder
+        mkdir -p /tmp/backports-flat
         find . -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
-        echo "rtl88xxau .ko added"
+        echo "rtl88xxau .ko added to staging"
     
     - name: Archive backports modules (flat)
       if: success()
