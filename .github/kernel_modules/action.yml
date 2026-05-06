@@ -144,54 +144,33 @@ runs:
         fi
         echo "REPO=$REPO" >> "$GITHUB_ENV"
 
-    # - name: Initialize and Sync Kernel Source
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     echo "Creating folder for configuration: $CONFIG"
-    #     mkdir -p "$CONFIG"
-    #     cd "$CONFIG"
-    #     echo "Initializing and syncing kernel source..."
-    #     if [[ "$MANIFEST" == https://* ]]; then
-    #       mkdir -p .repo/manifests
-    #       curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-    #       "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-    #     else
-    #       "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-    #     fi
-    #     "$REPO" --version
-    #     success=false
-    #     for i in 1 2 3; do
-    #       if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
-    #          -j"$(nproc --all)" --fail-fast; then
-    #         success=true
-    #         break
-    #       fi
-    #       echo "repo sync attempt $i failed; retrying..."
-    #       sleep 30
-    #     done
-    #     $success || { echo "repo sync failed after 3 attempts"; exit 1; }
-
-      # ⬇️ ՄԻԱԿ ՓՈՓՈԽՎԱԾ STEP-ը
     - name: Initialize and Sync Kernel Source
       shell: bash
       run: |
+        set -euo pipefail
+        echo "Creating folder for configuration: $CONFIG"
         mkdir -p "$CONFIG"
         cd "$CONFIG"
-        "$REPO" init \
-          --manifest-url https://github.com/docdry0001/kernel_patches.git \
-          --manifest-branch main \
-          -m kernel_manifest/oneplus_11r_b.xml \
-          --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+        echo "Initializing and syncing kernel source..."
+        if [[ "$MANIFEST" == https://* ]]; then
+          mkdir -p .repo/manifests
+          curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+        else
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+        fi
+        "$REPO" --version
         success=false
         for i in 1 2 3; do
-          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
-            success=true; break
+          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
+             -j"$(nproc --all)" --fail-fast; then
+            success=true
+            break
           fi
-          sleep 20
+          echo "repo sync attempt $i failed; retrying..."
+          sleep 30
         done
-        $success || { echo "repo sync failed"; exit 1; }
-      # Ավարտ
+        $success || { echo "repo sync failed after 3 attempts"; exit 1; }
 
     - name: Get Kernel Version Info
       shell: bash
@@ -301,32 +280,25 @@ runs:
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
           --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB=m \
-          --module CONFIG_MT76_PCI=m \
-          --module CONFIG_MT76_SDIO=m \
-          --module CONFIG_MT76_CONNAC_LIB=m \
-          --module CONFIG_MT76x0_COMMON=m \
-          --module CONFIG_MT76x0U=m \
-          --module CONFIG_MT76x0E=m \
-          --module CONFIG_MT76x2_COMMON=m \
-          --module CONFIG_MT76x2U=m \
-          --module CONFIG_MT76x2E=m \
-          --module CONFIG_MT7601U=m \
-          --module CONFIG_MT7603E=m \
-          --module CONFIG_MT7615_COMMON=m \
-          --module CONFIG_MT7615E=m \
-          --module CONFIG_MT7663_USB_SDIO_COMMON=m \
-          --module CONFIG_MT7663U=m \
-          --module CONFIG_MT7663S=m \
-          --module CONFIG_MT7915E=m \
-          --module CONFIG_MT7921_COMMON=m \
-          --module CONFIG_MT7921U=m \
-          --module CONFIG_MT7921S=m \
-          --module CONFIG_MT7921E=m  
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT7615_COMMON \
+          --module CONFIG_MT7915E \
+          --module CONFIG_MT7921E
+
+        # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
+
+          
 
     - name: Add memkernel module
       shell: bash
@@ -451,10 +423,7 @@ runs:
         git clone https://github.com/lwfinger/rtw88.git
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-        
 
-      
-        
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
@@ -615,78 +584,7 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-        
-    - name: Build External WiFi Driver (RTL8812AU)
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Setup RTL8812AU source"
-    
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT="$MSM/out"
-        DRIVER_DIR="$KERNEL_PLATFORM/../vendor/realtek/opensource/rtl8812au"
-    
-        mkdir -p "$(dirname "$DRIVER_DIR")"
-        cd "$(dirname "$DRIVER_DIR")"
-    
-        if [ -d "$DRIVER_DIR/.git" ]; then
-          echo "RTL8812AU already cloned, pulling latest..."
-          cd "$DRIVER_DIR"
-          git fetch --depth=1 origin master
-          git reset --hard origin/master
-        else
-          echo "Cloning RTL8812AU..."
-          git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git rtl8812au
-          cd "$DRIVER_DIR"
-        fi
-    
-        echo "::endgroup::"
-        echo "::group::Build RTL8812AU module"
-    
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        # Reuse the exact same MAKE_FLAGS as our main in-tree/external build
-        MAKE_FLAGS=(
-          -C "$MSM"
-          O="$OUT"
-          M="$(pwd)"
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC="ccache clang"
-        )
-    
-        echo "Building modules..."
-        make "${MAKE_FLAGS[@]}" modules -j"$(nproc --all)" || {
-          echo "ERROR: RTL8812AU build failed"
-          exit 1
-        }
-    
-        echo "Installing modules to $OUT..."
-        make "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$OUT" modules_install || {
-          echo "ERROR: RTL8812AU install failed"
-          exit 1
-        }
-    
-        echo "::endgroup::"
-    
+
     - name: Filter modules
       shell: bash
       run: |
