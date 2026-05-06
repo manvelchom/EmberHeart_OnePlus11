@@ -480,9 +480,6 @@ runs:
         RTL_DIR="$GITHUB_WORKSPACE/rtl88xxau"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
     
-        # ------------------------------------------------
-        # Use the SAME Clang toolchain as kernel build
-        # ------------------------------------------------
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
           export PATH="${CLANG_BIN_PATH}:$PATH"
         fi
@@ -490,7 +487,6 @@ runs:
         export LLVM=1
         export LLVM_IAS=1
         export ARCH=arm64
-        export SUBARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CC=clang
         export LD=ld.lld
@@ -504,8 +500,8 @@ runs:
         git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
         cd "$RTL_DIR"
     
-        # Build with explicit LLVM=1 and KSRC pointing to prepared out
-        make LLVM=1 KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" modules -j$(nproc --all)
+        # ⚠️ Փոխեք KLIB/KLIB_BUILD → KSRC (rtl88xxau-ն պահանջում է KSRC)
+        make KSRC="$KERNEL_BUILD" modules -j$(nproc --all)
     
         mkdir -p /tmp/rtl88xxau-ko
         find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
