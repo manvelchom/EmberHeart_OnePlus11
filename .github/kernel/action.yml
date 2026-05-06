@@ -96,6 +96,14 @@ runs:
         	CONFIG_USB_SERIAL_PL2303=y
         EOF
 
+    - name: Disable LTO (to avoid build hang)
+      shell: bash
+      run: |
+        cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --disable CONFIG_LTO_CLANG \
+          --disable CONFIG_LTO_CLANG_THIN
+
     - name: Detect Clang (prebuilts or system)
       shell: bash
       run: |
