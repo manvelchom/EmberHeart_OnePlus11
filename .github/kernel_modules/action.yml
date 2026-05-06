@@ -451,7 +451,15 @@ runs:
         git clone https://github.com/lwfinger/rtw88.git
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-
+        
+    - name: Build External WiFi Driver (RTL8812AU)
+      run: |
+        git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git external/rtl8812au
+        cd external/rtl8812au
+        make ARCH=${{ env.ARCH }} CROSS_COMPILE=${{ env.CROSS_COMPILE }} \
+             -C ${{ env.KERNEL_DIR }} O=out M=$PWD modules -j1 V=1
+        cd ${{ env.KERNEL_DIR }}
+        
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
