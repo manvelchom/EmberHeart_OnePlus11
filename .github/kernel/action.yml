@@ -471,7 +471,7 @@ runs:
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
-
+    
     - name: Build External rtl88xxau
       if: success()
       shell: bash
@@ -500,8 +500,8 @@ runs:
         git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
         cd "$RTL_DIR"
     
-        # ⚠️ Փոխեք KLIB/KLIB_BUILD → KSRC (rtl88xxau-ն պահանջում է KSRC)
-        make KSRC="$KERNEL_BUILD" modules -j$(nproc --all)
+        # ⚡ Fix Clang 12 unknown warning options
+        make KSRC="$KERNEL_BUILD" KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" modules -j$(nproc --all)
     
         mkdir -p /tmp/rtl88xxau-ko
         find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
