@@ -311,7 +311,9 @@ runs:
           --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921U \
+          --module CONFIG_MT7921S 
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
