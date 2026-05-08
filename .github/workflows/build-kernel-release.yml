@@ -16,11 +16,22 @@ on:
           - Pre-release
           - Release
         default: none
+      manifest:
+        description: 'Select manifest'
+        required: true
+        type: choice
+        options:
+          - OOS14
+          - OOS15
+          - FAST_BUILD_OOS15
+          - OOS16
+          - OOS16_CUSTOM
+        default: OOS16
       ksun_branch:
         description: 'Enter KernelSU Next Branch or commit hash (blank for stable tag)'
-        required: false
+        required: true
         type: string
-        default: ''
+        default: dev
       optimize_level:
         description: "Compiler optimization level"
         required: true
@@ -35,16 +46,78 @@ on:
         description: 'Enter SusFS Branch or commit hash'
         type: string
         default: ''
+      model:
+        description: 'Select device to be built'
+        required: true
+        type: choice
+        options:
+          - OP11R
+        default: OP11R
 
 jobs:
+  set-op-model:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout Code (to access configs/)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            configs/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup OnePlus Model
+        id: set-matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -a models=()
+          while IFS= read -r -d '' file; do
+            model=$(basename "$file" .json)
+            models+=("$model")
+          done < <(find configs/ -name "*.json" -print0)
+        
+          if [ ${#models[@]} -eq 0 ]; then
+            echo "Error: No config files found in configs/ directory!"
+            exit 1
+          fi
+        
+          echo "[" > matrix.json
+          for i in "${!models[@]}"; do
+            model="${models[$i]}"
+            file="configs/$model.json"
+            if [ -f "$file" ]; then
+              jq -r '.' "$file" >> matrix.json
+              if [ $((i+1)) -lt ${#models[@]} ]; then
+                echo "," >> matrix.json
+              fi
+            fi
+          done
+          echo "]" >> matrix.json
+
+          input="${{ inputs.model }}"
+          jq_filter="map(select(.model == \"$input\"))"
+
+          filtered=$(jq -c "$jq_filter" matrix.json)
+          wrapped=$(jq -n --argjson items "$filtered" '{ include: $items }')
+
+          echo "matrix<<MATRIX_EOF" >> "$GITHUB_OUTPUT"
+          echo "$wrapped" >> "$GITHUB_OUTPUT"
+          echo "MATRIX_EOF" >> "$GITHUB_OUTPUT"
+
   build-kernel:
-    name: Build EmberHeart Kernel
+    name: Build ${{ matrix.model }} EmberHeart kernel
+    needs: set-op-model
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -54,20 +127,25 @@ jobs:
       - name: Build Kernel
         uses: ./.github/kernel
         with:
+          op_config_json: ${{ toJSON(matrix) }}
           ksun_branch_or_hash: ${{ inputs.ksun_branch }}
           susfs_commit_hash_or_branch: ${{ inputs.susfs_branch_or_commit }}
           optimize_level: ${{ inputs.optimize_level }}
           kernel_uname: ${{ inputs.kernel_uname }}
+          manifest: ${{ inputs.manifest }}
 
   build-kernel-modules:
-    name: Build Kernel Modules
-    needs: build-kernel
+    name: Build ${{ matrix.model }} Kernel Modules
+    needs: set-op-model
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -77,7 +155,8 @@ jobs:
       - name: Build Kernel Modules
         uses: ./.github/kernel_modules
         with:
-          optimize_level: ${{ inputs.optimize_level }}
+          op_config_json: ${{ toJSON(matrix) }}
+          manifest: ${{ inputs.manifest }}
 
   trigger-release:
     needs:
@@ -89,38 +168,53 @@ jobs:
       REPO_OWNER: ${{ github.repository_owner }}
       REPO_NAME: ${{ github.event.repository.name }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OS_VERSION: $(grep -oi 'oos[0-9]\+' <<< "${{ inputs.manifest }}")
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Download Wireless Firmware Module for Nethunter 
+      - name: Download Wirless Firmware Module for Nethunter 
         id: download_external
         env:
           SOURCE_REPO: nullptr-t-oss/Nethunter-Wireless-Firmware 
         run: |
           echo "--- Downloading Latest Release Asset from $SOURCE_REPO ---"
+
           DOWNLOAD_DIR="./downloaded-artifacts/wireless-firmware"
           mkdir -p "$DOWNLOAD_DIR"
-          LATEST_RELEASE_TAG=$(gh api repos/$SOURCE_REPO/releases/latest --jq '.tag_name')
+
+          LATEST_RELEASE_TAG=$(gh api \
+            repos/$SOURCE_REPO/releases/latest \
+            --jq '.tag_name')
+
           if [ -z "$LATEST_RELEASE_TAG" ]; then
             echo "::warning::Could not find a latest release in $SOURCE_REPO. Skipping external download."
             exit 0
           fi
+
           echo "Found latest release tag: $LATEST_RELEASE_TAG"
+
           SOURCE_REPO_NAME=$(basename $SOURCE_REPO)
           EXPECTED_ASSET_NAME="${SOURCE_REPO_NAME}-${LATEST_RELEASE_TAG}.zip"
+
           gh release download $LATEST_RELEASE_TAG \
             --repo $SOURCE_REPO \
             --pattern $EXPECTED_ASSET_NAME \
             --dir $DOWNLOAD_DIR \
             --clobber
+
           echo "Finished downloading $EXPECTED_ASSET_NAME to $DOWNLOAD_DIR."
 
       - name: Generate Release name
         run: |
-          RELEASE_NAME="OnePlus 11R EmberHeart Kernel With KernelSU Next, Nethunter & SUSFS v2.1.0"
+          DEVICE="OnePlus $(grep -oi "OP[0-9]\+[A-Z]*" <<< "${{ inputs.model }}" || true)"
+
+          if [ -z "$DEVICE" ]; then
+             DEVICE="${{ inputs.model }}"
+          fi
+          RELEASE_NAME="$DEVICE EmberHeart Kernel With KernelSU Next, Nethunter & SUSFS v2.1.0"
           echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
 
       - name: Generate and Create New Tag
@@ -146,7 +240,8 @@ jobs:
       - name: Generate Device List and Final Release Notes
         id: generate-notes
         run: |
-          cat << 'EOF' > release_notes.md
+          echo "=== Start building the release notes ==="
+          cat << EOF > release_notes.md
           This release contains KernelSU Next and SUSFS v2.1.0
           
           Module: 
@@ -162,7 +257,19 @@ jobs:
           
           | Model | Kernel Version |
           |-------|----------------|
-          | OP11R  | (see AK3 zip) |
+          EOF
+          
+          # Generate table rows
+          find downloaded-artifacts -name "*.txt" -type f | sort | while read -r file; do
+            if [ -n "$file" ]; then
+              model=$(basename "$file" .txt)
+              version=$(cat "$file")
+              printf "| %-12s | %-16s |\n" "$model" "$version" >> release_notes.md
+            fi
+          done
+          
+          # Add features and finalize
+          cat << 'EOF' >> release_notes.md
           
           ### Features
           - [+] KernelSU-Next / WildKSU Manager Support
@@ -177,15 +284,19 @@ jobs:
           - [+] Nethunter Support
           - [+] Mem kernel driver by @Poko-Apps [r/w to physical memory]
           - [+] IP Set Support
-          - [+] Full Wi-Fi backports (MT76, Realtek, Ralink, Atheros, etc.)
+
           EOF
+          
+          # Output for debugging
+          echo "--- Final Release Notes ---"
+          cat release_notes.md
 
       - name: Create GitHub Pre-release
         if: ${{ inputs.release_type == 'Pre-release' }}
         run: |
           gh release create "${{ env.NEW_TAG }}" \
             --repo "${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}" \
-            --title "*Test-build*-${{ env.RELEASE_NAME }}-$(date +%Y%m%d)*Test Build*" \
+            --title "*Test-build*-${{ env.RELEASE_NAME }}-${{ env.OS_VERSION }}*Test Build*" \
             --notes-file release_notes.md \
             --prerelease
 
@@ -194,12 +305,12 @@ jobs:
         run: |
           gh release create "${{ env.NEW_TAG }}" \
             --repo "${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}" \
-            --title "${{ env.RELEASE_NAME }}-$(date +%Y%m%d)" \
+            --title "${{ env.RELEASE_NAME }}-${{ env.OS_VERSION }}" \
             --notes-file release_notes.md
 
       - name: Upload Release Assets Dynamically
         run: |
-          for file in ./downloaded-artifacts/*/*.{zip,deb,img}; do
+          for file in ./downloaded-artifacts/*/*.{zip,img}; do
             if [ -f "$file" ]; then
               echo "Uploading $file..."
               gh release upload "${{ env.NEW_TAG }}" "$file" --clobber
