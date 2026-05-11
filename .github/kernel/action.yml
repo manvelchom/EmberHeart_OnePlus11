@@ -384,21 +384,6 @@ runs:
         	CONFIG_NET_SCH_FQ_CODEL=y
         EOF
 
-    - name: Add Build Configs & MAC80211=m
-      shell: bash
-      run: |
-        cd "$COMMON_KERNEL_FOLDER"
-        cat >> arch/arm64/configs/gki_defconfig <<-EOF
-        	CONFIG_LTO_CLANG_THIN=y
-        	CONFIG_LTO_CLANG=y
-        	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-        	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=n
-        	CONFIG_OPTIMIZE_INLINING=y
-        	CONFIG_FRAME_WARN=0
-        	CONFIG_TRACEPOINTS=y
-        EOF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211
-
     - name: Save Build Metadata
       id: save_metadata
       shell: bash
@@ -491,40 +476,7 @@ runs:
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
     
-    - name: Build External rtl88xxau
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        RTL_DIR="$GITHUB_WORKSPACE/rtl88xxau"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-    
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1
-        export LLVM_IAS=1
-        export ARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export CC=clang
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
-    
-        rm -rf "$RTL_DIR"
-        git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
-        cd "$RTL_DIR"
-    
-        # ⚡ Fix Clang 12 unknown warning options
-        make KSRC="$KERNEL_BUILD" KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" modules -j$(nproc --all)
-    
-        mkdir -p /tmp/rtl88xxau-ko
-        find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
-        echo "rtl88xxau built successfully"
+
 
     - name: Archive rtl88xxau module
       if: success()
