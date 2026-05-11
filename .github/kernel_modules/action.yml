@@ -290,7 +290,7 @@ runs:
           --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921_COMMON \
           --module CONFIG_MT7921U \
           --module CONFIG_MT7921S
 
@@ -411,7 +411,7 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20
 
-    # ---------- NEW: Clone rtl88xxau driver (replaces rtw88) ----------
+    # ---------- Clone rtl88xxau driver ----------
     - name: Clone rtl88xxau driver
       shell: bash
       run: |
@@ -582,7 +582,7 @@ runs:
           build_external_module "$MODULE"
         done
 
-        # ---------- NEW: Build rtl88xxau external module ----------
+        # ---------- Build rtl88xxau external module (with clang warning fix) ----------
         echo "==== Processing rtl88xxau driver ===="
         RTL88XXAU_DIR="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek/rtl88xxau"
 
@@ -593,6 +593,7 @@ runs:
             KSRC="$MSM/out" \
             CC="ccache clang" \
             LD=ld.lld \
+            KCFLAGS='-Wno-error=unknown-warning-option' \
             -j"$(nproc --all)" \
             modules
 
