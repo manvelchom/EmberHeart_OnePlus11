@@ -448,25 +448,44 @@ runs:
         OUT=out
         KERNELRELEASE=$(make O="$OUT" -s kernelrelease)
         HEADERS_DIR="$GITHUB_WORKSPACE/linux-headers-$KERNELRELEASE"
+        INSTALL_DIR="$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
         rm -rf "$HEADERS_DIR"
         mkdir -p "$HEADERS_DIR/DEBIAN"
-        mkdir -p "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
-        make O="$OUT" ARCH=arm64 headers_install INSTALL_HDR_PATH="$HEADERS_DIR/usr"
-        cp "$OUT/.config" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/.config"
-        if [ -f "$OUT/Module.symvers" ]; then
-          cp "$OUT/Module.symvers" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/Module.symvers"
-        else
-          echo "::warning::Module.symvers not found; headers package will lack symbol version info"
+        mkdir -p "$INSTALL_DIR"
+    
+        # 1. Copy the entire kernel source include directories
+        cp -r include "$INSTALL_DIR/"
+        cp -r arch/arm64/include "$INSTALL_DIR/arch/arm64/"
+    
+        # 2. Copy generated headers and configuration from out
+        mkdir -p "$INSTALL_DIR/include/generated"
+        if [ -d "$OUT/include/generated" ]; then
+          cp -r "$OUT/include/generated"/* "$INSTALL_DIR/include/generated/"
         fi
+        mkdir -p "$INSTALL_DIR/arch/arm64/include/generated"
+        if [ -d "$OUT/arch/arm64/include/generated" ]; then
+          cp -r "$OUT/arch/arm64/include/generated"/* "$INSTALL_DIR/arch/arm64/include/generated/"
+        fi
+    
+        # 3. Copy .config and Module.symvers
+        cp "$OUT/.config" "$INSTALL_DIR/"
+        if [ -f "$OUT/Module.symvers" ]; then
+          cp "$OUT/Module.symvers" "$INSTALL_DIR/"
+        fi
+    
+        # 4. Create control file
         cat > "$HEADERS_DIR/DEBIAN/control" <<-EOF
         Package: linux-headers-$KERNELRELEASE
         Version: $KERNELRELEASE
-        Architecture: arm64
+        Archititecture: arm64
         Maintainer: $BUILD_USER <$BUILD_USER@$BUILD_HOST>
         Description: Linux kernel headers for $KERNELRELEASE
-         This package provides kernel header files for version $KERNELRELEASE,
-         useful for building external kernel modules like DKMS or manual compilations.
+         This package provides the kernel header files and configuration
+         needed to build external kernel modules for the specified kernel.
+         Installed under /usr/src/linux-headers-$KERNELRELEASE.
         EOF
+    
+        # 5. Build .deb
         cd "$GITHUB_WORKSPACE"
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
