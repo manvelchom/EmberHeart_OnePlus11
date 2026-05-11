@@ -259,7 +259,7 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
         
-        # Realtek drivers
+        # Realtek drivers (keep for possible other Realtek modules, but rtl88xxau is external)
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
 
@@ -290,17 +290,14 @@ runs:
           --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7921_COMMON \
           --module CONFIG_MT7921E \
-          --module CONFIG_MT7921U
+          --module CONFIG_MT7921U \
+          --module CONFIG_MT7921S
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
-
-
-          
 
     - name: Add memkernel module
       shell: bash
@@ -412,19 +409,30 @@ runs:
 
         echo "[+] Verifying binder fix..."
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
-        grep -n 'mmget_still_valid' "$FILE" | head -20   
-        
-    - name: Add rtw88 modules
+        grep -n 'mmget_still_valid' "$FILE" | head -20
+
+    # ---------- Clone rtl88xxau driver ----------
+    - name: Clone rtl88xxau driver
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
+        VENDOR_REALTEK="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek"
+        mkdir -p "$VENDOR_REALTEK"
+        cd "$VENDOR_REALTEK"
+        git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git rtl88xxau
+
+    # ---------- PATCH FIX: remove -Wimplicit-fallthrough=0 from Makefile ----------
+    - name: Patch rtl88xxau Makefile
+      shell: bash
+      run: |
+        set -euo pipefail
+        RTL_MAKEFILE="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek/rtl88xxau/Makefile"
+        if [ -f "$RTL_MAKEFILE" ]; then
+          sed -i 's/-Wimplicit-fallthrough=0//g' "$RTL_MAKEFILE"
+          echo "Removed -Wimplicit-fallthrough=0 from rtl88xxau Makefile"
+        else
+          echo "Makefile not found, skipping patch"
+        fi
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -586,6 +594,30 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
+
+        # ---------- Build rtl88xxau external module ----------
+        echo "==== Processing rtl88xxau driver ===="
+        RTL88XXAU_DIR="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek/rtl88xxau"
+
+        if [ -d "$RTL88XXAU_DIR" ]; then
+          make -C "$RTL88XXAU_DIR" \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            KSRC="$MSM/out" \
+            CC="ccache clang" \
+            LD=ld.lld \
+            -j"$(nproc --all)" \
+            modules
+
+          make -C "$RTL88XXAU_DIR" \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            KSRC="$MSM/out" \
+            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" \
+            modules_install
+        else
+          echo "rtl88xxau source not found, skipping"
+        fi
 
     - name: Filter modules
       shell: bash
