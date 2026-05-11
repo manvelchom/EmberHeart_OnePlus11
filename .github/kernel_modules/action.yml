@@ -47,17 +47,22 @@ runs:
         manifest="$MANIFEST"
         optimize='${{ inputs.optimize_level }}'
     
+        # Non-empty checks
         [[ -n "$model" ]] || { echo "Input 'model' cannot be empty"; exit 1; }
         [[ -n "$soc" ]] || { echo "Input 'soc' cannot be empty"; exit 1; }
         [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
         [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
     
+        # Basic format checks
+        # soc: allow letters, digits, underscores, dashes (e.g., sm8650)
         if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
-          echo "Input 'soc' contains invalid characters"; exit 1
+          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"; exit 1
         fi    
+        # branch: allow common ref patterns; spaces not allowed
         if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-          echo "Input 'branch' contains invalid characters"; exit 1
+          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"; exit 1
         fi    
+        # manifest: either HTTPS URL ending with .xml, or a filename ending with .xml (no spaces)
         if [[ "$manifest" == http*://* ]]; then
           if ! [[ "$manifest" =~ ^https:// ]]; then
             echo "Manifest URL must be HTTPS"; exit 1
@@ -73,9 +78,10 @@ runs:
             echo "Manifest filename cannot contain spaces"; exit 1
           fi
         fi
+        # Optimize level validation
         case "$optimize" in
           O2|O3) ;;
-          *) echo "optimize_level must be O2 or O3"; exit 1 ;;
+          *) echo "optimize_level must be O2 or O3; got '$optimize'"; exit 1 ;;
         esac
         echo "Input validation OK."
         echo "::endgroup::"
@@ -85,7 +91,26 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Cleanup space"
-        sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/.ghcup /usr/local/julia* /usr/local/lib/android /usr/local/share/chromium /opt/microsoft /opt/google /opt/az /usr/local/share/powershell /opt/hostedtoolcache
+        # Remove .NET SDKs
+        sudo rm -rf /usr/share/dotnet
+        # Remove Swift toolchain
+        sudo rm -rf /usr/share/swift
+        # Remove Haskell (GHC)
+        sudo rm -rf /usr/local/.ghcup
+        # Remove Julia
+        sudo rm -rf /usr/local/julia*
+        # Remove Android SDKs
+        sudo rm -rf /usr/local/lib/android
+        # Remove Chromium (optional if not using for browser tests)
+        sudo rm -rf /usr/local/share/chromium
+        # Remove Microsoft/Edge and Google Chrome builds
+        sudo rm -rf /opt/microsoft /opt/google
+        # Remove Azure CLI
+        sudo rm -rf /opt/az
+        # Remove PowerShell
+        sudo rm -rf /usr/local/share/powershell
+        # Remove CodeQL and other toolcaches
+        sudo rm -rf /opt/hostedtoolcache
         docker system prune -af || true
         docker builder prune -af || true
         df -h
@@ -108,8 +133,10 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        # Derive a unique build directory name
         CONFIG="$MODEL"
         echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
+        # Install repo tool if missing
         REPO="/usr/local/bin/repo"
         if [ ! -x "$REPO" ]; then
           curl -s https://storage.googleapis.com/git-repo-downloads/repo -o "$REPO"
@@ -128,7 +155,7 @@ runs:
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
           "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
@@ -212,10 +239,15 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT=out
+
         cd "$MSM"
+
         make ARCH=arm64 mrproper
         mkdir -p "$OUT"
+
+        # Merge defconfig fragments from vendor/$SOC_GKI.config
         ./scripts/kconfig/merge_config.sh -O "$OUT" -m arch/arm64/configs/gki_defconfig arch/arm64/configs/vendor/${SOC}_GKI.config
+
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
@@ -226,10 +258,50 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_WLAN_VENDOR_REALTEK
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_WLAN_VENDOR_ATH --module CONFIG_ATH_COMMON --module CONFIG_ATH9K --module CONFIG_ATH9K_HW --module CONFIG_ATH9K_HTC --module CONFIG_ATH9K_COMMON --module CONFIG_ATH10K --module CONFIG_ATH10K_USB --module CONFIG_ATH11K
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_WLAN_VENDOR_MEDIATEK --module CONFIG_MT7601U --module CONFIG_MT76_CORE --module CONFIG_MT76_USB --module CONFIG_MT76x02_LIB --module CONFIG_MT76x02_USB --module CONFIG_MT76_CONNAC_LIB --module CONFIG_MT7603E --module CONFIG_MT76x2_COMMON --module CONFIG_MT76x0_COMMON --module CONFIG_MT7615_COMMON --module CONFIG_MT7915E --module CONFIG_MT7921E --module CONFIG_MT7921U --module CONFIG_MT7921S
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211_LEDS --module CONFIG_CAN_SLCAN
+        
+        # Realtek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_REALTEK
+
+        # ATH drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_ATH \
+          --module CONFIG_ATH_COMMON \
+          --module CONFIG_ATH9K \
+          --module CONFIG_ATH9K_HW \
+          --module CONFIG_ATH9K_HTC \
+          --module CONFIG_ATH9K_COMMON \
+          --module CONFIG_ATH10K \
+          --module CONFIG_ATH10K_USB \
+          --module CONFIG_ATH11K
+
+        # Mediatek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT7615_COMMON \
+          --module CONFIG_MT7615E \
+          --module CONFIG_MT7921_COMMON \
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921U \
+          --module CONFIG_MT7921S
+
+        # Other configs
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --module CONFIG_MAC80211_LEDS \
+          --module CONFIG_CAN_SLCAN
+
+
+          
 
     - name: Add memkernel module
       shell: bash
@@ -247,8 +319,10 @@ runs:
         set -euo pipefail
         echo "Applying kernel patches to msm kernel from my repo..."
         cd "$CONFIG/kernel_platform/msm-kernel"
+    
         shopt -s nullglob
         PATCHES=(../../../my_patches/kernel_patches/op11/msm/*.patch)
+    
         if [ ${#PATCHES[@]} -eq 0 ]; then
           echo "[!] No OP11 msm patches found, skipping."
         else
@@ -264,8 +338,17 @@ runs:
       run: |
         set -euo pipefail
         cd "$CONFIG/kernel_platform/msm-kernel/mm"
+
+        echo "[+] Cleaning old broken injections..."
         sed -i '/bool scan_adjusted = false;/d' vmscan.c
+
+        echo "[+] Patching exact declaration block in shrink_lruvec()..."
+
         perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
+
+        echo "[+] Verifying..."
+        grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
+        grep -n "scan_adjusted" vmscan.c | head -20
 
     - name: FIX thermal kvzalloc kvfree (waipio)
       if: env.SOC == 'waipio'
@@ -273,21 +356,40 @@ runs:
       run: |
         set -euo pipefail
         export FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
+
+        echo "[+] Patching $FILE"
+
         python3 - <<'PY'
         import os
         from pathlib import Path
+
         path = Path(os.environ["FILE"])
         text = path.read_text()
+
         if "#include <linux/mm.h>" not in text and "#include <linux/slab.h>" in text:
             text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>\n#include <linux/mm.h>", 1)
+
         if "#define kvzalloc(size, flags)" not in text:
-            shim = "\n#ifndef kvzalloc\n#define kvzalloc(size, flags) kzalloc((size), (flags))\n#endif\n#ifndef kvfree\n#define kvfree(ptr) kfree((ptr))\n#endif\n"
+            shim = (
+                "\n#ifndef kvzalloc\n"
+                "#define kvzalloc(size, flags) kzalloc((size), (flags))\n"
+                "#endif\n"
+                "#ifndef kvfree\n"
+                "#define kvfree(ptr) kfree((ptr))\n"
+                "#endif\n"
+            )
+
             if "#include <linux/mm.h>" in text:
                 text = text.replace("#include <linux/mm.h>", "#include <linux/mm.h>" + shim, 1)
             elif "#include <linux/slab.h>" in text:
                 text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>" + shim, 1)
+
         path.write_text(text)
         PY
+
+        echo "[+] Verifying thermal fix..."
+        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
+
     
     - name: FIX binder mmget_still_valid compat (waipio)
       if: env.SOC == 'waipio'
@@ -295,32 +397,35 @@ runs:
       run: |
         set -euo pipefail
         FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
+
+        echo "[+] Cleaning previous broken binder edits..."
         sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
         sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+5d' "$FILE"
         sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
-        grep -q '^#include <linux/sched/mm.h>$' "$FILE" || sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
-        grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
 
-    # ---------- NEW: Clone rtl88xxau driver ----------
-    - name: Clone rtl88xxau driver
+        echo "[+] Ensuring correct mm header..."
+        grep -q '^#include <linux/sched/mm.h>$' "$FILE" || \
+          sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
+
+        echo "[+] Adding local compat shim only for mmget_still_valid()..."
+        grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
+          perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
+
+        echo "[+] Verifying binder fix..."
+        grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
+        grep -n 'mmget_still_valid' "$FILE" | head -20   
+        
+    - name: Add rtw88 modules
       shell: bash
       run: |
         set -euo pipefail
-        VENDOR_REALTEK="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek"
-        mkdir -p "$VENDOR_REALTEK"
-        cd "$VENDOR_REALTEK"
-        git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git rtl88xxau
-
-    # ---------- PATCH: remove -Wimplicit-fallthrough=0 ----------
-    - name: Patch rtl88xxau Makefile
-      shell: bash
-      run: |
-        set -euo pipefail
-        RTL_MAKEFILE="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek/rtl88xxau/Makefile"
-        if [ -f "$RTL_MAKEFILE" ]; then
-          sed -i 's/-Wimplicit-fallthrough=0//g' "$RTL_MAKEFILE"
-          echo "Removed -Wimplicit-fallthrough=0"
-        fi
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtw88
+        git clone https://github.com/lwfinger/rtw88.git
+        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -359,14 +464,24 @@ runs:
         export PATH="/usr/lib/ccache:$PATH"
 
         MAKE_FLAGS=(
-          LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
           CLANG_TRIPLE=aarch64-linux-gnu-
           CROSS_COMPILE=aarch64-linux-gnu-
           CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm
-          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
-          DEPMOD=depmod DTC=dtc STRIP=llvm-strip
-          HOSTCC=clang HOSTCXX=clang++
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          DEPMOD=depmod
+          DTC=dtc
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
           CC=ccache\ clang
         )
 
@@ -375,21 +490,31 @@ runs:
         mkdir -p "$OUT"
 
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        ./scripts/config --file "$OUT/.config" --enable CONFIG_LTO_CLANG_THIN --enable CONFIG_LTO_CLANG --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+
+        ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+
         echo "Building in-tree kernel modules..."
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
         cd "$KERNEL_PLATFORM"
+
         mkdir -p "$KERNEL_PLATFORM/oplus/config"
         touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
+
         mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
         printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
+
         MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
 
         mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
-        OPLUS_FLAGS=( CHIPSET_COMPANY=QCOM OPLUS_VND_BUILD_PLATFORM="$SOC" )
+
+        OPLUS_FLAGS=(
+          CHIPSET_COMPANY=QCOM
+          OPLUS_VND_BUILD_PLATFORM="$SOC"
+        )
+
         EXT_QCOM=(
           ../vendor/qcom/opensource/mmrm-driver
           ../vendor/qcom/opensource/mm-drivers/hw_fence
@@ -425,45 +550,43 @@ runs:
         build_external_module() {
           local module="$1"
           local extra_syms=()
+
           echo "==== Processing module: $module ===="
-          [ -d "$module" ] || { echo "Skipping missing module dir: $module"; return 0; }
-          [ -f "$module/Makefile" ] || [ -f "$module/Kbuild" ] || { echo "Skipping module without Makefile/Kbuild: $module"; return 0; }
-          [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" && -f "$MMRM_SYMVERS" ]] && extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
-          make -C "$module" M="../$module" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" "${extra_syms[@]}" modules || { echo "Build failed, skipping module: $module"; return 0; }
-          make -C "$module" M="../$module" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install || { echo "Install failed, skipping module: $module"; return 0; }
+
+          if [ ! -d "$module" ]; then
+            echo "Skipping missing module dir: $module"
+            return 0
+          fi
+
+          if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
+            echo "Skipping module without Makefile/Kbuild: $module"
+            return 0
+          fi
+
+          if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
+            extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
+            echo "Using mmrm Module.symvers for $module"
+          fi
+
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" modules; then
+            echo "Build failed, skipping module: $module"
+            return 0
+          fi
+
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+            echo "Install failed, skipping module: $module"
+            return 0
+          fi
         }
 
         for MODULE in "${EXT_OPLUS[@]}"; do
           [ -n "$MODULE" ] || continue
           build_external_module "$MODULE"
         done
+
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-
-        # ---------- Build rtl88xxau external module (with safety KCFLAGS) ----------
-        echo "==== Processing rtl88xxau driver ===="
-        RTL88XXAU_DIR="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek/rtl88xxau"
-        if [ -d "$RTL88XXAU_DIR" ]; then
-          make -C "$RTL88XXAU_DIR" clean
-          make -C "$RTL88XXAU_DIR" \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            KSRC="$MSM/out" \
-            CC="ccache clang" \
-            LD=ld.lld \
-            KCFLAGS='-Wno-error' \
-            -j"$(nproc --all)" \
-            modules
-          make -C "$RTL88XXAU_DIR" \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            KSRC="$MSM/out" \
-            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" \
-            modules_install
-        else
-          echo "rtl88xxau source not found, skipping"
-        fi
 
     - name: Filter modules
       shell: bash
@@ -473,14 +596,24 @@ runs:
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
         UNAME=$(ls "$OUT/lib/modules/")
+
+        echo "Copying all modules to $OUT/modules"
         cd "$OUT"
         mkdir -p modules
         find lib/modules/"$UNAME" -type f -name '*.ko' -exec cp {} modules/ \;
         echo "Total modules copied: $(find modules -type f -name '*.ko' | wc -l)"
+
+        echo "Removing unnecessary modules..."
         cd modules
+        # Download default module list
         curl -L -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
+        # Remove modules in the default list
+
         while IFS= read -r module; do
-          [ -e "$module" ] && rm -f "$module"
+          if [ -e "$module" ]; then
+            rm -f "$module"
+            echo "Removed module: $module"
+          fi
         done < default_modules.txt
         cd ..
         echo "Modules remaining after filtering: $(find modules -type f -name '*.ko' | wc -l)"
@@ -519,6 +652,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        echo "Deleting old ccache..."
         gh cache delete ccache-${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}- || true
 
     - name: Upload Kernel Modules zip
