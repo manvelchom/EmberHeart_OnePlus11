@@ -291,8 +291,8 @@ runs:
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
           --module CONFIG_MT7921_COMMON \
-          --module CONFIG_MT7921U \
-          --module CONFIG_MT7921S
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921U
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -582,7 +582,7 @@ runs:
           build_external_module "$MODULE"
         done
 
-        # ---------- Build rtl88xxau external module (with clang warning fix) ----------
+        # ---------- Build rtl88xxau external module (all warnings allowed) ----------
         echo "==== Processing rtl88xxau driver ===="
         RTL88XXAU_DIR="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek/rtl88xxau"
 
@@ -593,7 +593,7 @@ runs:
             KSRC="$MSM/out" \
             CC="ccache clang" \
             LD=ld.lld \
-            KCFLAGS='-Wno-error=unknown-warning-option' \
+            KCFLAGS='-Wno-error' \
             -j"$(nproc --all)" \
             modules
 
