@@ -155,7 +155,7 @@ runs:
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
           "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
@@ -275,24 +275,30 @@ runs:
           --module CONFIG_ATH10K_USB \
           --module CONFIG_ATH11K
 
-        
+        # Mediatek drivers - ensure all needed options are modules
+        # The external tree will replace the in-tree one, but these configs
+        # must be enabled for the Kconfig to make them visible.
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT7615_COMMON \
+          --module CONFIG_MT7915E \
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921U
+
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-
-          
-
-    - name: Add memkernel module
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM"
-        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
-        
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
       shell: bash
@@ -405,20 +411,47 @@ runs:
         cd "$MSM/drivers/net/wireless/realtek/"
         rm -rf rtw88
         git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+        sed -i 's/$(CONFIG_RTW88)/m/g' rtw88/Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-    - name: Add mt76 modules
+    - name: Replace Mediatek drivers with external tree
       shell: bash
       run: |
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/"
-        rm -rf mediatek
-        git clone https://github.com/docdry0001/mt7921.git
-        sed -i 's/$(CONFIG_MEDIATEK)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/mt7921\/Kconfig"$/s/.*/ /' Kconfig
+        MEDIATEK_DIR="$MSM/drivers/net/wireless/mediatek"
+        WIRELESS_DIR="$MSM/drivers/net/wireless"
+
+        echo "===== Replacing MediaTek Wi-Fi drivers with external tree ====="
+
+        # 1. Remove the old in-tree mediatek folder entirely
+        echo "Removing old mediatek directory..."
+        rm -rf "$MEDIATEK_DIR"
+
+        # 2. Clone the external full MediaTek driver repository
+        echo "Cloning external MediaTek driver repository..."
+        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$WIRELESS_DIR/mt7921"
+
+        # 3. Rename the cloned directory to 'mediatek'
+        mv "$WIRELESS_DIR/mt7921" "$MEDIATEK_DIR"
+        echo "Renamed cloned repository to mediatek."
+
+        # 4. Ensure the parent Kconfig includes the new mediatek directory
+        KCONFIG_FILE="$WIRELESS_DIR/Kconfig"
+        if ! grep -q 'source "drivers/net/wireless/mediatek/Kconfig"' "$KCONFIG_FILE"; then
+            echo 'source "drivers/net/wireless/mediatek/Kconfig"' >> "$KCONFIG_FILE"
+            echo "Added mediatek Kconfig source."
+        fi
+
+        # 5. Ensure the parent Makefile enters the mediatek directory
+        MAKEFILE_FILE="$WIRELESS_DIR/Makefile"
+        if ! grep -q 'obj.*mediatek/' "$MAKEFILE_FILE"; then
+            echo 'obj-$(CONFIG_MT76_CORE) += mediatek/' >> "$MAKEFILE_FILE"
+            echo "Added mediatek directory to parent Makefile."
+        fi
+
+        echo "===== MediaTek replacement complete ====="
 
     - name: Detect Clang (toolchain for build)
       shell: bash
