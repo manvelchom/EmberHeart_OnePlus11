@@ -414,45 +414,8 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' rtw88/Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-    - name: Replace Mediatek drivers with external tree
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        MEDIATEK_DIR="$MSM/drivers/net/wireless/mediatek"
-        WIRELESS_DIR="$MSM/drivers/net/wireless"
-
-        echo "===== Replacing MediaTek Wi-Fi drivers with external tree ====="
-
-        # 1. Remove the old in-tree mediatek folder entirely
-        echo "Removing old mediatek directory..."
-        rm -rf "$MEDIATEK_DIR"
-
-        # 2. Clone the external full MediaTek driver repository
-        echo "Cloning external MediaTek driver repository..."
-        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$WIRELESS_DIR/mt7921"
-
-        # 3. Rename the cloned directory to 'mediatek'
-        mv "$WIRELESS_DIR/mt7921" "$MEDIATEK_DIR"
-        echo "Renamed cloned repository to mediatek."
-
-        # 4. Ensure the parent Kconfig includes the new mediatek directory
-        KCONFIG_FILE="$WIRELESS_DIR/Kconfig"
-        if ! grep -q 'source "drivers/net/wireless/mediatek/Kconfig"' "$KCONFIG_FILE"; then
-            echo 'source "drivers/net/wireless/mediatek/Kconfig"' >> "$KCONFIG_FILE"
-            echo "Added mediatek Kconfig source."
-        fi
-
-        # 5. Ensure the parent Makefile enters the mediatek directory
-        MAKEFILE_FILE="$WIRELESS_DIR/Makefile"
-        if ! grep -q 'obj.*mediatek/' "$MAKEFILE_FILE"; then
-            echo 'obj-$(CONFIG_MT76_CORE) += mediatek/' >> "$MAKEFILE_FILE"
-            echo "Added mediatek directory to parent Makefile."
-        fi
-
-        echo "===== MediaTek replacement complete ====="
-
+    
+    
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
@@ -478,6 +441,41 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
+    - name: Build External mt7921 (standalone)
+      if: success()
+      shell: bash
+      run: |
+        set -euo pipefail
+        MT7921_DIR="$GITHUB_WORKSPACE/mt7921"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+    
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
+        export LLVM=1
+        export LLVM_IAS=1
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CC=clang
+        export LD=ld.lld
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
+    
+        rm -rf "$MT7921_DIR"
+        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT7921_DIR"
+        cd "$MT7921_DIR"
+    
+        # Standalone build with KSRC
+        make KSRC="$KERNEL_BUILD" KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" modules -j$(nproc --all)
+    
+        mkdir -p /tmp/mt7921-ko
+        find . -name '*.ko' -exec cp {} /tmp/mt7921-ko/ \;
+        echo "mt7921 built successfully (standalone)"
+    
     - name: Build Kernel Modules
       shell: bash
       run: |
