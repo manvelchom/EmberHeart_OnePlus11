@@ -586,7 +586,6 @@ runs:
         MT7921_DIR="$GITHUB_WORKSPACE/mt7921"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
     
-        # Use the same Clang environment as kernel build
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
           export PATH="${CLANG_BIN_PATH}:$PATH"
         fi
@@ -607,7 +606,10 @@ runs:
         git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT7921_DIR"
         cd "$MT7921_DIR"
     
-        # Build using the prepared kernel out (M= method)
+        # ---- Fix broken include ----
+        sed -i '/Makefile.kernel/d' Makefile
+    
+        # ---- Build with kernel out ----
         make -C "$KERNEL_BUILD" M="$MT7921_DIR" \
           KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" \
           modules -j$(nproc --all)
