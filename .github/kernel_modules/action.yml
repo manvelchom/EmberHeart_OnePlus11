@@ -440,41 +440,6 @@ runs:
         CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
-
-    - name: Build External mt7921 (standalone)
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        MT7921_DIR="$GITHUB_WORKSPACE/mt7921"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-    
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1
-        export LLVM_IAS=1
-        export ARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export CC=clang
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
-    
-        rm -rf "$MT7921_DIR"
-        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT7921_DIR"
-        cd "$MT7921_DIR"
-    
-        # Standalone build with KSRC
-        make KSRC="$KERNEL_BUILD" KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" modules -j$(nproc --all)
-    
-        mkdir -p /tmp/mt7921-ko
-        find . -name '*.ko' -exec cp {} /tmp/mt7921-ko/ \;
-        echo "mt7921 built successfully (standalone)"
     
     - name: Build Kernel Modules
       shell: bash
@@ -538,6 +503,7 @@ runs:
           CHIPSET_COMPANY=QCOM
           OPLUS_VND_BUILD_PLATFORM="$SOC"
         )
+
 
         EXT_QCOM=(
           ../vendor/qcom/opensource/mmrm-driver
@@ -611,6 +577,44 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
+
+    - name: Build External mt7921 (standalone via kernel out)
+      if: success()
+      shell: bash
+      run: |
+        set -euo pipefail
+        MT7921_DIR="$GITHUB_WORKSPACE/mt7921"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+    
+        # Use the same Clang environment as kernel build
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
+        export LLVM=1
+        export LLVM_IAS=1
+        export ARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CC=clang
+        export LD=ld.lld
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
+    
+        rm -rf "$MT7921_DIR"
+        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT7921_DIR"
+        cd "$MT7921_DIR"
+    
+        # Build using the prepared kernel out (M= method)
+        make -C "$KERNEL_BUILD" M="$MT7921_DIR" \
+          KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" \
+          modules -j$(nproc --all)
+    
+        mkdir -p /tmp/mt7921-ko
+        find . -name '*.ko' -exec cp {} /tmp/mt7921-ko/ \;
+        echo "mt7921 built successfully (standalone)"
 
     - name: Filter modules
       shell: bash
