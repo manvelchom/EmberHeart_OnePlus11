@@ -417,30 +417,22 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         MT7921_DIR="$MSM/drivers/net/wireless/mediatek/mt7921"
-
+    
         # ---- Remove old directory if it exists (in-tree mt7921) ----
         rm -rf "$MT7921_DIR"
-
+    
         # ---- Clone your external mt7921 repository ----
         git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT7921_DIR"
-
+    
         # ---- Makefile fix: force building as module ----
         sed -i 's/$(CONFIG_MT7921U)/m/g' "$MT7921_DIR/Makefile"
-
-        # ---- Kconfig integration (if the repo provides a Kconfig) ----
-        if [ -f "$MT7921_DIR/Kconfig" ]; then
-          cd "$MSM/drivers/net/wireless/mediatek/"
-          # Remove any existing source line for mt7921 to avoid duplicates
-          sed -i '/^source "drivers\/net\/wireless\/mediatek\/mt7921\/Kconfig"$/d' Kconfig
-          echo 'source "drivers/net/wireless/mediatek/mt7921/Kconfig"' >> Kconfig
-        fi
-
+    
         # ---- Ensure the parent Makefile includes mt7921 directory ----
         MEDIATEK_MAKEFILE="$MSM/drivers/net/wireless/mediatek/Makefile"
         if ! grep -q 'obj-.*CONFIG_MT7921U.*+=' "$MEDIATEK_MAKEFILE"; then
           echo 'obj-$(CONFIG_MT7921U) += mt7921/' >> "$MEDIATEK_MAKEFILE"
         fi
-
+    
         echo "mt7921 external module prepared"
 
     - name: Detect Clang (toolchain for build)
