@@ -487,7 +487,9 @@ runs:
         rm -rf "$RTL_DIR"
         git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
         cd "$RTL_DIR"
-        make KSRC="$KERNEL_BUILD" KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" modules -j$(nproc --all)
+        make KSRC="$KERNEL_BUILD" \
+          KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough -Wno-uninitialized -Wno-parentheses -Wno-sometimes-uninitialized" \
+          modules -j$(nproc --all)
         mkdir -p /tmp/rtl88xxau-ko
         find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
         echo "rtl88xxau built successfully"
