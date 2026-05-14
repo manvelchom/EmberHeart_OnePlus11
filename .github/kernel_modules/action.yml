@@ -394,7 +394,7 @@ runs:
         cd "$MSM/drivers/net/wireless/realtek/"
         rm -rf rtw88
         git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' rtw88/Makefile
+        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
     - name: add mt76 modules
@@ -410,8 +410,6 @@ runs:
         sed -i 's/$(CONFIG_MT76)/m/g' mt76/Makefile
         sed -i '/^source "drivers\/net\/wireless\/mediatek\/mt76\/Kconfig"$/s/.*/ /' Kconfig
 
-
-    
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
@@ -436,8 +434,8 @@ runs:
         CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
-    
-    - name: Build Kernel Modules
+
+    - name: Build Kernel Modules 
       shell: bash
       run: |
         set -euo pipefail
@@ -445,10 +443,10 @@ runs:
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
 
-        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="${CLANG_BIN_PATH}:$PATH" 
         export PATH="/usr/lib/ccache:$PATH"
 
-        MAKE_FLAGS=(
+        MAKE_FLAGS+=(
           LLVM=1
           LLVM_IAS=1
           ARCH=arm64
@@ -467,152 +465,134 @@ runs:
           STRIP=llvm-strip
           HOSTCC=clang
           HOSTCXX=clang++
-          CC=ccache\ clang
+          CC="ccache clang"
         )
 
         OUT=out
         INSTALL_MOD_PATH="$MSM/out"
         mkdir -p "$OUT"
-
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+        
+        # Thin LTO
+        ./scripts/config --file "$OUT/.config" \
+            --enable CONFIG_LTO_CLANG_THIN \
+            --enable CONFIG_LTO_CLANG \
+            --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
+            --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
-        ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
-
-        echo "Building in-tree kernel modules..."
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        echo "Building kernel modules..."
+        make "${MAKE_FLAGS[@]}" O=$OUT olddefconfig
+        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" modules
+        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
         cd "$KERNEL_PLATFORM"
-
+     
+        # ===== FIX START =====
+        # Fix missing OPLUS modules list
         mkdir -p "$KERNEL_PLATFORM/oplus/config"
         touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
-
+  
+        # Fix missing mmrm-driver test Makefile
         mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
-        printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
-
-        MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
-
-        mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
-
-        OPLUS_FLAGS=(
-          CHIPSET_COMPANY=QCOM
-          OPLUS_VND_BUILD_PLATFORM="$SOC"
+        cat > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile" <<'EOF'
+        obj-m :=
+        EOF
+        
+        # ===== FIX END =====
+      
+        MAKE_FLAGS+=(
+          KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel"
         )
+        # OPLUS ext modules list
+        EXT_OPLUS=($(cat "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"))
 
-
-        EXT_QCOM=(
-          ../vendor/qcom/opensource/mmrm-driver
-          ../vendor/qcom/opensource/mm-drivers/hw_fence
-          ../vendor/qcom/opensource/mm-drivers/sync_fence
-          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
-          ../vendor/qcom/opensource/securemsm-kernel
-          ../vendor/qcom/opensource/display-drivers/msm
-          ../vendor/qcom/opensource/audio-kernel
-          ../vendor/qcom/opensource/camera-kernel
-          ../vendor/oplus/kernel/explorer
-          ../vendor/qcom/opensource/video-driver
-          ../vendor/qcom/opensource/graphics-kernel
-          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
-          ../vendor/qcom/opensource/datarmnet/core
-          ../vendor/qcom/opensource/datarmnet-ext/aps
-          ../vendor/qcom/opensource/datarmnet-ext/offload
-          ../vendor/qcom/opensource/datarmnet-ext/shs
-          ../vendor/qcom/opensource/datarmnet-ext/sch
-          ../vendor/qcom/opensource/datarmnet-ext/perf
-          ../vendor/qcom/opensource/datarmnet-ext/perf_tether
-          ../vendor/qcom/opensource/datarmnet-ext/wlan
-          ../vendor/qcom/opensource/eva-kernel
-          ../vendor/qcom/opensource/wlan/platform
-          ../vendor/qcom/opensource/bt-kernel
-          ../vendor/nxp/opensource/driver
-          ../vendor/st/opensource/driver
-          ../vendor/st/opensource/eSE-driver
-          ../vendor/qcom/opensource/wlan/qcacld-3.0
+        OPLUS_FLAGS+=(
+            CHIPSET_COMPANY=QCOM
+            OPLUS_VND_BUILD_PLATFORM="$SOC"
         )
-
+        # OPLUS ext modules
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
-
-        build_external_module() {
-          local module="$1"
-          local extra_syms=()
-
-          echo "==== Processing module: $module ===="
-
-          if [ ! -d "$module" ]; then
-            echo "Skipping missing module dir: $module"
-            return 0
-          fi
-
-          if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
-            echo "Skipping module without Makefile/Kbuild: $module"
-            return 0
-          fi
-
-          if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
-            extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
-            echo "Using mmrm Module.symvers for $module"
-          fi
-
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" modules; then
-            echo "Build failed, skipping module: $module"
-            return 0
-          fi
-
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
-            echo "Install failed, skipping module: $module"
-            return 0
-          fi
-        }
+        
+        for MODULE in "${EXT_QCOM[@]}"; do
+            if [ ! -d "$MODULE" ]; then
+                echo "Skipping missing module dir: $MODULE"
+                continue
+            fi
+        
+            if [ ! -f "$MODULE/Makefile" ] && [ ! -f "$MODULE/Kbuild" ]; then
+                echo "Skipping module without Makefile/Kbuild: $MODULE"
+                continue
+            fi
+        
+            EXTRA_SYMS=()
+        
+            if [[ "$MODULE" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
+                EXTRA_SYMS+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
+                echo "Using mmrm Module.symvers for $MODULE"
+            fi
+        
+            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) \
+                "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" \
+                "${EXTRA_SYMS[@]}" modules
+        
+            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) \
+                "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" \
+                "${EXTRA_SYMS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
+        done
+        # QCOM ext modules
+        EXT_QCOM+=(
+            ../vendor/qcom/opensource/mmrm-driver
+            ../vendor/qcom/opensource/mm-drivers/hw_fence
+            ../vendor/qcom/opensource/mm-drivers/sync_fence
+            ../vendor/qcom/opensource/mm-drivers/msm_ext_display
+            ../vendor/qcom/opensource/securemsm-kernel
+            ../vendor/qcom/opensource/display-drivers/msm
+            ../vendor/qcom/opensource/audio-kernel
+            ../vendor/qcom/opensource/camera-kernel
+            ../vendor/oplus/kernel/explorer
+            ../vendor/qcom/opensource/video-driver
+            ../vendor/qcom/opensource/graphics-kernel
+            ../vendor/qcom/opensource/dataipa/drivers/platform/msm
+            ../vendor/qcom/opensource/datarmnet/core
+            ../vendor/qcom/opensource/datarmnet-ext/aps
+            ../vendor/qcom/opensource/datarmnet-ext/offload
+            ../vendor/qcom/opensource/datarmnet-ext/shs
+            ../vendor/qcom/opensource/datarmnet-ext/sch
+            ../vendor/qcom/opensource/datarmnet-ext/perf
+            ../vendor/qcom/opensource/datarmnet-ext/perf_tether
+            ../vendor/qcom/opensource/datarmnet-ext/wlan
+            ../vendor/qcom/opensource/eva-kernel
+            ../vendor/qcom/opensource/wlan/platform
+            ../vendor/qcom/opensource/bt-kernel
+            ../vendor/nxp/opensource/driver
+            ../vendor/st/opensource/driver
+            ../vendor/st/opensource/eSE-driver
+            ../vendor/qcom/opensource/wlan/qcacld-3.0
+        )
 
         for MODULE in "${EXT_OPLUS[@]}"; do
-          [ -n "$MODULE" ] || continue
-          build_external_module "$MODULE"
-        done
+          echo "==== Processing OPLUS module: $MODULE ===="
 
-        for MODULE in "${EXT_QCOM[@]}"; do
-          build_external_module "$MODULE"
-        done
-
-    - name: Build External mt7921 (standalone via kernel out)
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        MT7921_DIR="$GITHUB_WORKSPACE/mt7921"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-    
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
+          if [ ! -d "$MODULE" ]; then
+           echo "Skipping missing module dir: $MODULE"
+        continue
         fi
-        export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1
-        export LLVM_IAS=1
-        export ARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export CC=clang
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
-    
-        rm -rf "$MT7921_DIR"
-        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT7921_DIR"
-        cd "$MT7921_DIR"
-    
-        # ---- Fix broken include ----
-        sed -i '/Makefile.kernel/d' Makefile
-    
-        # ---- Build with kernel out ----
-        make -C "$KERNEL_BUILD" M="$MT7921_DIR" \
-          KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" \
-          modules -j$(nproc --all)
-    
-        mkdir -p /tmp/mt7921-ko
-        find . -name '*.ko' -exec cp {} /tmp/mt7921-ko/ \;
-        echo "mt7921 built successfully (standalone)"
+
+        if [ ! -f "$MODULE/Makefile" ] && [ ! -f "$MODULE/Kbuild" ]; then
+        echo "Skipping module without Makefile/Kbuild: $MODULE"
+        continue
+        fi
+
+        if ! make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"; then
+           echo "Build failed, skipping OPLUS module: $MODULE"
+        continue
+        fi
+
+        if ! make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install; then
+           echo "Install failed, skipping OPLUS module: $MODULE"
+        continue
+        fi
+        done
 
     - name: Filter modules
       shell: bash
@@ -687,3 +667,6 @@ runs:
       with:
         name: kernel-modules-${{ env.CONFIG }}
         path: ${{ env.CONFIG }}/artifacts/
+
+    
+    
