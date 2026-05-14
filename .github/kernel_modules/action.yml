@@ -274,13 +274,10 @@ runs:
           --module CONFIG_ATH10K \
           --module CONFIG_ATH10K_USB \
           --module CONFIG_ATH11K
-
-
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
           --module CONFIG_MT76x02_LIB \
@@ -291,14 +288,8 @@ runs:
           --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7921_COMMON \ 
-          --module CONFIG_MT7921E \
-          --module CONFIG_MT7921U \
-          --module CONFIG_MT7921S
-
-
-
-
+          --module CONFIG_MT7921_COMMON \
+          --module CONFIG_MT7921U
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
