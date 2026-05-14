@@ -403,6 +403,7 @@ runs:
         rm -rf mt76
         git clone https://github.com/shengliangd/mt76-backport.git
         mv mt76-backport mt76
+        cd mt76
     
         # Փոխարինում ենք obj-$(CONFIG_...) արտահայտությունները obj-m-ով
         sed -i 's/obj-\$(CONFIG_MT76_CORE)/obj-m/g' mt76/Makefile
