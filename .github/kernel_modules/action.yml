@@ -406,6 +406,7 @@ runs:
         cd "$MSM/drivers/net/wireless/mediatek/"
         rm -rf mt76
         git clone https://github.com/shengliangd/mt76-backport.git
+        mv mt76-backport mt76
         sed -i 's/$(CONFIG_MT76)/m/g' mt76/Makefile
         sed -i '/^source "drivers\/net\/wireless\/mediatek\/mt76\/Kconfig"$/s/.*/ /' Kconfig
 
