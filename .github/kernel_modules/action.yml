@@ -397,7 +397,19 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' rtw88/Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-    
+    - name: add mt76 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/mediatek/"
+        rm -rf mt76
+        git clone https://github.com/shengliangd/mt76-backport.git
+        sed -i 's/$(CONFIG_MT76)/m/g' mt76/Makefile
+        sed -i '/^source "drivers\/net\/wireless\/mediatek\/mt76\/Kconfig"$/s/.*/ /' Kconfig
+
+
     
     - name: Detect Clang (toolchain for build)
       shell: bash
