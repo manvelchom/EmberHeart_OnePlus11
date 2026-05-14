@@ -403,7 +403,6 @@ runs:
         rm -rf mt76
         git clone https://github.com/shengliangd/mt76-backport.git
         mv mt76-backport mt76
-        cd mt76
     
         # Փոխարինում ենք obj-$(CONFIG_...) արտահայտությունները obj-m-ով
         sed -i 's/obj-\$(CONFIG_MT76_CORE)/obj-m/g' mt76/Makefile
@@ -411,15 +410,15 @@ runs:
         sed -i 's/obj-\$(CONFIG_MT76x02_LIB)/obj-m/g' mt76/Makefile
         sed -i 's/obj-\$(CONFIG_MT76x02_USB)/obj-m/g' mt76/Makefile
         sed -i 's/obj-\$(CONFIG_MT76_CONNAC_LIB)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT76x0_COMMON)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT76x2_COMMON)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT7603E)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT7615_COMMON)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT7915E)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT7921_COMMON)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT7921E)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT7921S)/obj-m/g' mt76/Makefile
-        sed -i 's/obj-\$(CONFIG_MT7921U)/obj-m/g' mt76/Makefile
+        sed -i 's/obj-\$(CONFIG_MT76x0_COMMON)/obj-m/g' mt76/mt76x0/Makefile
+        sed -i 's/obj-\$(CONFIG_MT76x2_COMMON)/obj-m/g' mt76/mt76x2/Makefile
+        sed -i 's/obj-\$(CONFIG_MT7603E)/obj-m/g' mt76/mt7603/Makefile
+        sed -i 's/obj-\$(CONFIG_MT7615_COMMON)/obj-m/g' mt76/mt7615/Makefile
+        sed -i 's/obj-\$(CONFIG_MT7915E)/obj-m/g' mt76/mt7915/Makefile
+        sed -i 's/obj-\$(CONFIG_MT7921_COMMON)/obj-m/g' mt76/mt7921/Makefile
+        sed -i 's/obj-\$(CONFIG_MT7921E)/obj-m/g' mt76/mt7921/Makefile
+        sed -i 's/obj-\$(CONFIG_MT7921S)/obj-m/g' mt76/mt7921/Makefile
+        sed -i 's/obj-\$(CONFIG_MT7921U)/obj-m/g' mt76/mt7921/Makefile
 
     - name: Detect Clang (toolchain for build)
       shell: bash
