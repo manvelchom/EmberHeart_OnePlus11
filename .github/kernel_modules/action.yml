@@ -407,20 +407,7 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
         
-    - name: Add rtw88 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-
-
-
+        
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
@@ -453,7 +440,8 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
-
+        git clone https://github.com/aircrack-ng/rtl8812au.git
+        cd rtl8812au 
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
 
@@ -581,7 +569,8 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-
+        
+        
     - name: Filter modules
       shell: bash
       run: |
