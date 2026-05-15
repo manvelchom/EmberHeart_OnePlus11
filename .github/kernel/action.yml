@@ -323,7 +323,15 @@ runs:
           "$KERNEL_PATCHES_FOLDER/common/reduce_freeze_timeout.patch"; do
           patch -p1 --forward < "$patch" || true
         done
-
+        
+    - name: Add mt76 modules
+      shell: bash
+      run: |
+        cd "$COMMON_KERNEL_FOLDER/drivers/net/wireless/mediatek"
+        rm -rf mt76
+        git clone https://github.com/docdry0001/mt76-backport.git
+        mv mt76-backport mt76
+        
     - name: Add Nethunter Inline Configs
       shell: bash
       run: |
@@ -349,6 +357,21 @@ runs:
         	CONFIG_USB_SERIAL_CH341=y
         	CONFIG_USB_SERIAL_FTDI_SIO=y
         	CONFIG_USB_SERIAL_PL2303=y
+          CONFIG_WLAN_VENDOR_MEDIATEK=y
+          CONFIG_MT76_CORE=y
+          CONFIG_MT76_LEDS=y
+          CONFIG_MT76_USB=y
+          CONFIG_MT76_SDIO=y
+          CONFIG_MT76x02_LIB=y
+          CONFIG_MT76x02_USB=y
+          CONFIG_MT76_CONNAC_LIB=y
+          CONFIG_MT76x2_COMMON=y
+          CONFIG_MT76x2E=y
+          CONFIG_MT76x2U=y
+          CONFIG_MT7921_COMMON=y
+          CONFIG_MT7921E=y
+          CONFIG_MT7921S=y
+          CONFIG_MT7921U=y
         EOF
 
     - name: Add TTL Support
