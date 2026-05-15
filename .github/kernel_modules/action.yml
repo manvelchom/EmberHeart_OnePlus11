@@ -259,9 +259,9 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/"
-        rm -r mediatek
+        rm -rf mediatek
         git clone -b mediatek https://github.com/docdry0001/mt7921.git
-        cd mediatek
+        mv mt7921 mediatek
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
