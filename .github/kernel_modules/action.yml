@@ -251,6 +251,18 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
+
+    - name: Add mt76 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/"
+        rm -rf mediatek
+        git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git
+        mv mt7921 mediatek
+        
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -277,7 +289,6 @@ runs:
           --module CONFIG_MT7921_COMMON \
           --module CONFIG_MT7921E \
           --module CONFIG_MT7921U 
-          
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
@@ -408,16 +419,7 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-    - name: Add mt76 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/"
-        rm -rf mediatek
-        git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git
-        mv mt7921 mediatek
+
 
     - name: Detect Clang (toolchain for build)
       shell: bash
