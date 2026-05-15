@@ -401,10 +401,11 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/mediatek/"
-        rm -rf mt76
-        git clone https://github.com/shengliangd/mt76-backport.git
-        mv mt76-backport mt76
+        cd "$MSM/drivers/net/wireless/"
+        rm -rf mediatek
+        git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git
+        mv mt7921 mediatek
+        
 
     - name: Detect Clang (toolchain for build)
       shell: bash
