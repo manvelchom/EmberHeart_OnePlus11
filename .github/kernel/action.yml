@@ -470,7 +470,25 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
+        make -j$(nproc --all) O="$OUT" modules   
+
+    - name: Archive MediaTek kernel modules
+      if: success()
+      shell: bash
+      run: |
+        set -euo pipefail
+        MODULES_DIR="$COMMON_KERNEL_FOLDER/out"
+        MEDIATEK_DIR="$GITHUB_WORKSPACE/mediatek-modules"
+        mkdir -p "$MEDIATEK_DIR"
     
+        # Պատճենել միայն MediaTek-ի մոդուլները (mt76, mt7921, ...)
+        find "$MODULES_DIR" -type f -name 'mt76*.ko' -exec cp {} "$MEDIATEK_DIR/" \;
+        find "$MODULES_DIR" -type f -name 'mt792*.ko' -exec cp {} "$MEDIATEK_DIR/" \;
+    
+        cd "$MEDIATEK_DIR"
+        zip -r "$ARTIFACTS_FOLDER/mediatek-wifi-modules.zip" .
+        echo "MediaTek modules archive created: $ARTIFACTS_FOLDER/mediatek-wifi-modules.zip"
+        
     - name: Build Linux Headers .deb Package
       if: success()
       shell: bash
@@ -752,11 +770,10 @@ runs:
         ls -la "$ARTIFACTS_FOLDER"
 
     - name: Upload Artifacts
-      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: kernel-${{ env.CONFIG }}
         path: |
           ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-          ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
           ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
+          ${{ env.ARTIFACTS_FOLDER }}/mediatek-wifi-modules.zip
