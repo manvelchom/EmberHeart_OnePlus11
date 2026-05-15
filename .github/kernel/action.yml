@@ -87,7 +87,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-  r      model="$OP_MODEL"
+        model="$OP_MODEL"
         soc="$OP_SOC"
         branch="$OP_BRANCH"
         manifest="$OP_MANIFEST"
