@@ -358,20 +358,20 @@ runs:
         	CONFIG_USB_SERIAL_FTDI_SIO=y
         	CONFIG_USB_SERIAL_PL2303=y
           CONFIG_WLAN_VENDOR_MEDIATEK=y
-          CONFIG_MT76_CORE=y
+          CONFIG_MT76_CORE=m
           CONFIG_MT76_LEDS=y
-          CONFIG_MT76_USB=y
-          CONFIG_MT76_SDIO=y
-          CONFIG_MT76x02_LIB=y
-          CONFIG_MT76x02_USB=y
-          CONFIG_MT76_CONNAC_LIB=y
-          CONFIG_MT76x2_COMMON=y
-          CONFIG_MT76x2E=y
-          CONFIG_MT76x2U=y
-          CONFIG_MT7921_COMMON=y
-          CONFIG_MT7921E=y
-          CONFIG_MT7921S=y
-          CONFIG_MT7921U=y
+          CONFIG_MT76_USB=m
+          CONFIG_MT76_SDIO=m
+          CONFIG_MT76x02_LIB=m
+          CONFIG_MT76x02_USB=m
+          CONFIG_MT76_CONNAC_LIB=m
+          CONFIG_MT76x2_COMMON=m
+          CONFIG_MT76x2E=m
+          CONFIG_MT76x2U=m
+          CONFIG_MT7921_COMMON=m
+          CONFIG_MT7921E=m
+          CONFIG_MT7921S=m
+          CONFIG_MT7921U=m
         EOF
 
     - name: Add TTL Support
