@@ -359,7 +359,7 @@ runs:
         	CONFIG_USB_SERIAL_PL2303=y
           CONFIG_WLAN_VENDOR_MEDIATEK=y
           CONFIG_MT76_CORE=m
-          CONFIG_MT76_LEDS=y
+          CONFIG_MT76_LEDS=m
           CONFIG_MT76_USB=m
           CONFIG_MT76_SDIO=m
           CONFIG_MT76x02_LIB=m
@@ -471,7 +471,7 @@ runs:
         make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
         make -j$(nproc --all) O="$OUT" modules   
-
+       
     - name: Archive MediaTek kernel modules
       if: success()
       shell: bash
@@ -481,14 +481,29 @@ runs:
         MEDIATEK_DIR="$GITHUB_WORKSPACE/mediatek-modules"
         mkdir -p "$MEDIATEK_DIR"
     
-        # Պատճենել միայն MediaTek-ի մոդուլները (mt76, mt7921, ...)
+        # Find .ko files anywhere under out/ and copy them
         find "$MODULES_DIR" -type f -name 'mt76*.ko' -exec cp {} "$MEDIATEK_DIR/" \;
         find "$MODULES_DIR" -type f -name 'mt792*.ko' -exec cp {} "$MEDIATEK_DIR/" \;
+    
+        # If still empty, try modules_install location
+        if [ -z "$(ls -A "$MEDIATEK_DIR" 2>/dev/null)" ]; then
+          echo "No .ko files found directly; trying modules_install path..."
+          KERNELRELEASE=$(make -C "$COMMON_KERNEL_FOLDER" O="$MODULES_DIR" -s kernelrelease)
+          INSTALL_PATH="$MODULES_DIR/lib/modules/$KERNELRELEASE"
+          find "$INSTALL_PATH" -type f -name 'mt76*.ko' -exec cp {} "$MEDIATEK_DIR/" \;
+          find "$INSTALL_PATH" -type f -name 'mt792*.ko' -exec cp {} "$MEDIATEK_DIR/" \;
+        fi
+    
+        if [ -z "$(ls -A "$MEDIATEK_DIR" 2>/dev/null)" ]; then
+          echo "Still no .ko files found. Build may have skipped modules."
+          exit 1
+        fi
     
         cd "$MEDIATEK_DIR"
         zip -r "$ARTIFACTS_FOLDER/mediatek-wifi-modules.zip" .
         echo "MediaTek modules archive created: $ARTIFACTS_FOLDER/mediatek-wifi-modules.zip"
-        
+
+    
     - name: Build Linux Headers .deb Package
       if: success()
       shell: bash
