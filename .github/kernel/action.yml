@@ -327,10 +327,10 @@ runs:
     - name: Add mt76 modules
       shell: bash
       run: |
-        cd "$COMMON_KERNEL_FOLDER/drivers/net/wireless/mediatek"
-        rm -rf mt76
-        git clone https://github.com/docdry0001/mt76-backport.git
-        mv mt76-backport mt76
+        cd "$COMMON_KERNEL_FOLDER/drivers/net/wireless"
+        rm -rf mediatek
+        git clone -b mediatek https://github.com/docdry0001/mt7921.git
+        mv mt7921 mediatek
         
     - name: Add Nethunter Inline Configs
       shell: bash
