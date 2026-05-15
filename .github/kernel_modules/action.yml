@@ -155,9 +155,9 @@ runs:
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         "$REPO" --version
         success=false
@@ -395,16 +395,16 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
         
-    - name: add mt76 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/"
-        rm -rf mediatek
-        git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git
-        mv mt7921 mediatek
+    # - name: add mt76 modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    #     MSM="$KERNEL_PATH/msm-kernel"
+    #     cd "$MSM/drivers/net/wireless/"
+    #     rm -rf mediatek
+    #     git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git
+    #     mv mt7921 mediatek
         
 
     - name: Detect Clang (toolchain for build)
