@@ -259,29 +259,61 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
         
-          # Mediatek drivers
+        # Realtek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_REALTEK
+
+        # ATH drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_ATH \
+          --module CONFIG_ATH_COMMON \
+          --module CONFIG_ATH9K \
+          --module CONFIG_ATH9K_HW \
+          --module CONFIG_ATH9K_HTC \
+          --module CONFIG_ATH9K_COMMON \
+          --module CONFIG_ATH10K \
+          --module CONFIG_ATH10K_USB \
+          --module CONFIG_ATH11K
+
+        # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
           --module CONFIG_MT76x02_LIB \
           --module CONFIG_MT76x02_USB \
           --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT76x0U \
+          --module CONFIG_MT7603E \
           --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x2U \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT7615_COMMON \
+          --module CONFIG_MT7915E \
           --module CONFIG_MT7921_COMMON \
           --module CONFIG_MT7921E \
           --module CONFIG_MT7921U \
           --module CONFIG_MT7921S
+
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
+
+          
+
+    - name: Add memkernel module
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM"
+        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
+        
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'valod'
       shell: bash
       run: |
         set -euo pipefail
@@ -394,18 +426,6 @@ runs:
         git clone https://github.com/lwfinger/rtw88.git
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-        
-    # - name: add mt76 modules
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-    #     MSM="$KERNEL_PATH/msm-kernel"
-    #     cd "$MSM/drivers/net/wireless/"
-    #     rm -rf mediatek
-    #     git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git
-    #     mv mt7921 mediatek
-        
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -432,7 +452,7 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
-    - name: Build Kernel Modules 
+    - name: Build Kernel Modules
       shell: bash
       run: |
         set -euo pipefail
@@ -440,10 +460,10 @@ runs:
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
 
-        export PATH="${CLANG_BIN_PATH}:$PATH" 
+        export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
 
-        MAKE_FLAGS+=(
+        MAKE_FLAGS=(
           LLVM=1
           LLVM_IAS=1
           ARCH=arm64
@@ -462,133 +482,110 @@ runs:
           STRIP=llvm-strip
           HOSTCC=clang
           HOSTCXX=clang++
-          CC="ccache clang"
+          CC=ccache\ clang
         )
 
         OUT=out
         INSTALL_MOD_PATH="$MSM/out"
         mkdir -p "$OUT"
-        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        
-        # Thin LTO
-        ./scripts/config --file "$OUT/.config" \
-            --enable CONFIG_LTO_CLANG_THIN \
-            --enable CONFIG_LTO_CLANG \
-            --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
-            --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
-        echo "Building kernel modules..."
-        make "${MAKE_FLAGS[@]}" O=$OUT olddefconfig
-        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" modules
-        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+
+        ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+
+        echo "Building in-tree kernel modules..."
+        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
         cd "$KERNEL_PLATFORM"
-     
-        # ===== FIX START =====
-        # Fix missing OPLUS modules list
+
         mkdir -p "$KERNEL_PLATFORM/oplus/config"
         touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
-  
-        # Fix missing mmrm-driver test Makefile
-        mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
-        cat > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile" <<'EOF'
-        obj-m :=
-        EOF
-        
-        # ===== FIX END =====
-      
-        MAKE_FLAGS+=(
-          KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel"
-        )
-        # OPLUS ext modules list
-        EXT_OPLUS=($(cat "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"))
 
-        OPLUS_FLAGS+=(
-            CHIPSET_COMPANY=QCOM
-            OPLUS_VND_BUILD_PLATFORM="$SOC"
+        mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
+        printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
+
+        MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
+
+        mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
+
+        OPLUS_FLAGS=(
+          CHIPSET_COMPANY=QCOM
+          OPLUS_VND_BUILD_PLATFORM="$SOC"
         )
-        # OPLUS ext modules
+
+        EXT_QCOM=(
+          ../vendor/qcom/opensource/mmrm-driver
+          ../vendor/qcom/opensource/mm-drivers/hw_fence
+          ../vendor/qcom/opensource/mm-drivers/sync_fence
+          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
+          ../vendor/qcom/opensource/securemsm-kernel
+          ../vendor/qcom/opensource/display-drivers/msm
+          ../vendor/qcom/opensource/audio-kernel
+          ../vendor/qcom/opensource/camera-kernel
+          ../vendor/oplus/kernel/explorer
+          ../vendor/qcom/opensource/video-driver
+          ../vendor/qcom/opensource/graphics-kernel
+          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
+          ../vendor/qcom/opensource/datarmnet/core
+          ../vendor/qcom/opensource/datarmnet-ext/aps
+          ../vendor/qcom/opensource/datarmnet-ext/offload
+          ../vendor/qcom/opensource/datarmnet-ext/shs
+          ../vendor/qcom/opensource/datarmnet-ext/sch
+          ../vendor/qcom/opensource/datarmnet-ext/perf
+          ../vendor/qcom/opensource/datarmnet-ext/perf_tether
+          ../vendor/qcom/opensource/datarmnet-ext/wlan
+          ../vendor/qcom/opensource/eva-kernel
+          ../vendor/qcom/opensource/wlan/platform
+          ../vendor/qcom/opensource/bt-kernel
+          ../vendor/nxp/opensource/driver
+          ../vendor/st/opensource/driver
+          ../vendor/st/opensource/eSE-driver
+          ../vendor/qcom/opensource/wlan/qcacld-3.0
+        )
+
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
-        
-        for MODULE in "${EXT_QCOM[@]}"; do
-            if [ ! -d "$MODULE" ]; then
-                echo "Skipping missing module dir: $MODULE"
-                continue
-            fi
-        
-            if [ ! -f "$MODULE/Makefile" ] && [ ! -f "$MODULE/Kbuild" ]; then
-                echo "Skipping module without Makefile/Kbuild: $MODULE"
-                continue
-            fi
-        
-            EXTRA_SYMS=()
-        
-            if [[ "$MODULE" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
-                EXTRA_SYMS+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
-                echo "Using mmrm Module.symvers for $MODULE"
-            fi
-        
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) \
-                "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" \
-                "${EXTRA_SYMS[@]}" modules
-        
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) \
-                "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" \
-                "${EXTRA_SYMS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
-        done
-        # QCOM ext modules
-        EXT_QCOM+=(
-            ../vendor/qcom/opensource/mmrm-driver
-            ../vendor/qcom/opensource/mm-drivers/hw_fence
-            ../vendor/qcom/opensource/mm-drivers/sync_fence
-            ../vendor/qcom/opensource/mm-drivers/msm_ext_display
-            ../vendor/qcom/opensource/securemsm-kernel
-            ../vendor/qcom/opensource/display-drivers/msm
-            ../vendor/qcom/opensource/audio-kernel
-            ../vendor/qcom/opensource/camera-kernel
-            ../vendor/oplus/kernel/explorer
-            ../vendor/qcom/opensource/video-driver
-            ../vendor/qcom/opensource/graphics-kernel
-            ../vendor/qcom/opensource/dataipa/drivers/platform/msm
-            ../vendor/qcom/opensource/datarmnet/core
-            ../vendor/qcom/opensource/datarmnet-ext/aps
-            ../vendor/qcom/opensource/datarmnet-ext/offload
-            ../vendor/qcom/opensource/datarmnet-ext/shs
-            ../vendor/qcom/opensource/datarmnet-ext/sch
-            ../vendor/qcom/opensource/datarmnet-ext/perf
-            ../vendor/qcom/opensource/datarmnet-ext/perf_tether
-            ../vendor/qcom/opensource/datarmnet-ext/wlan
-            ../vendor/qcom/opensource/eva-kernel
-            ../vendor/qcom/opensource/wlan/platform
-            ../vendor/qcom/opensource/bt-kernel
-            ../vendor/nxp/opensource/driver
-            ../vendor/st/opensource/driver
-            ../vendor/st/opensource/eSE-driver
-            ../vendor/qcom/opensource/wlan/qcacld-3.0
-        )
+
+        build_external_module() {
+          local module="$1"
+          local extra_syms=()
+
+          echo "==== Processing module: $module ===="
+
+          if [ ! -d "$module" ]; then
+            echo "Skipping missing module dir: $module"
+            return 0
+          fi
+
+          if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
+            echo "Skipping module without Makefile/Kbuild: $module"
+            return 0
+          fi
+
+          if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
+            extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
+            echo "Using mmrm Module.symvers for $module"
+          fi
+
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" modules; then
+            echo "Build failed, skipping module: $module"
+            return 0
+          fi
+
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+            echo "Install failed, skipping module: $module"
+            return 0
+          fi
+        }
 
         for MODULE in "${EXT_OPLUS[@]}"; do
-          echo "==== Processing OPLUS module: $MODULE ===="
+          [ -n "$MODULE" ] || continue
+          build_external_module "$MODULE"
+        done
 
-          if [ ! -d "$MODULE" ]; then
-           echo "Skipping missing module dir: $MODULE"
-        continue
-        fi
-
-        if [ ! -f "$MODULE/Makefile" ] && [ ! -f "$MODULE/Kbuild" ]; then
-        echo "Skipping module without Makefile/Kbuild: $MODULE"
-        continue
-        fi
-
-        if ! make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"; then
-           echo "Build failed, skipping OPLUS module: $MODULE"
-        continue
-        fi
-
-        if ! make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install; then
-           echo "Install failed, skipping OPLUS module: $MODULE"
-        continue
-        fi
+        for MODULE in "${EXT_QCOM[@]}"; do
+          build_external_module "$MODULE"
         done
 
     - name: Filter modules
@@ -664,6 +661,3 @@ runs:
       with:
         name: kernel-modules-${{ env.CONFIG }}
         path: ${{ env.CONFIG }}/artifacts/
-
-    
-    
