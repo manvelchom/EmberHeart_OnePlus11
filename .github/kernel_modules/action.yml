@@ -259,7 +259,7 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/"
-        rm -rf mt76
+        rm -rf mediatek
         git clone -b mediatek https://github.com/docdry0001/mt7921.git
         mv mt7921 mediatek
         
