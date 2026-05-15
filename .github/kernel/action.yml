@@ -471,70 +471,30 @@ runs:
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
     
-    - name: Build External mt7921 (5.10-compat standalone)
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        MT7921_DIR="$GITHUB_WORKSPACE/mt7921"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-    
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1
-        export LLVM_IAS=1
-        export ARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export CC=clang
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
-    
-        rm -rf "$MT7921_DIR"
-        git clone --depth=1 --branch 5.10-compat https://github.com/astsam/mt7921.git "$MT7921_DIR"
-        cd "$MT7921_DIR"
-    
-        # ---- Fix any potential CFI macro issues (same as always) ----
-        if [ -f "include/linux/module.h" ]; then
-          sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' include/linux/module.h
-          sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' include/linux/module.h
-        fi
-    
-        # ---- Build with KSRC ----
-        make KSRC="$KERNEL_BUILD" KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" modules -j$(nproc --all)
-    
-        # ---- Copy .ko files ----
-        mkdir -p /tmp/mt7921-ko
-        find . -name '*.ko' -exec cp {} /tmp/mt7921-ko/ \;
-        echo "mt7921 built successfully (5.10-compat)"
 
-    - name: Build External rtl88xxau
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        RTL_DIR="$GITHUB_WORKSPACE/rtl88xxau"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-        export CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
-        rm -rf "$RTL_DIR"
-        git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
-        cd "$RTL_DIR"
-        make KSRC="$KERNEL_BUILD" \
-          KCFLAGS="-Wno-error -Wno-implicit-fallthrough" \
-          modules -j$(nproc --all)
-        mkdir -p /tmp/rtl88xxau-ko
-        find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
-        echo "rtl88xxau built successfully"
+
+    # - name: Build External rtl88xxau
+    #   if: success()
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     RTL_DIR="$GITHUB_WORKSPACE/rtl88xxau"
+    #     KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
+    #     if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+    #       export PATH="${CLANG_BIN_PATH}:$PATH"
+    #     fi
+    #     export PATH="/usr/lib/ccache:$PATH"
+    #     export LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+    #     export CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+    #     rm -rf "$RTL_DIR"
+    #     git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
+    #     cd "$RTL_DIR"
+    #     make KSRC="$KERNEL_BUILD" \
+    #       KCFLAGS="-Wno-error -Wno-implicit-fallthrough" \
+    #       modules -j$(nproc --all)
+    #     mkdir -p /tmp/rtl88xxau-ko
+    #     find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
+    #     echo "rtl88xxau built successfully"
 
     - name: Archive all external modules
       if: success()
