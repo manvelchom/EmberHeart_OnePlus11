@@ -12,7 +12,7 @@ inputs:
   optimize_level:
     required: false
     type: string
-    default: O2
+    default: O2  # Choices: O2 or O3
   manifest:
     required: true
     type: string
@@ -29,7 +29,7 @@ runs:
         jq -r 'to_entries[] | "\(.key | ascii_upcase)=\(.value)"' /tmp/config.json >> "$GITHUB_ENV"
         echo "Parsed config:"
         jq '.' /tmp/config.json
-
+    
     - name: Set Manifest
       shell: bash
       run: |
@@ -46,50 +46,43 @@ runs:
         branch="$BRANCH"
         manifest="$MANIFEST"
         optimize='${{ inputs.optimize_level }}'
-
+    
+        # Non-empty checks
         [[ -n "$model" ]] || { echo "Input 'model' cannot be empty"; exit 1; }
         [[ -n "$soc" ]] || { echo "Input 'soc' cannot be empty"; exit 1; }
         [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
         [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
-
+    
+        # Basic format checks
+        # soc: allow letters, digits, underscores, dashes (e.g., sm8650)
         if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
-          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"
-          exit 1
-        fi
-
+          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"; exit 1
+        fi    
+        # branch: allow common ref patterns; spaces not allowed
         if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"
-          exit 1
-        fi
-
+          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"; exit 1
+        fi    
+        # manifest: either HTTPS URL ending with .xml, or a filename ending with .xml (no spaces)
         if [[ "$manifest" == http*://* ]]; then
           if ! [[ "$manifest" =~ ^https:// ]]; then
-            echo "Manifest URL must be HTTPS"
-            exit 1
+            echo "Manifest URL must be HTTPS"; exit 1
           fi
           if ! [[ "$manifest" =~ \.xml($|\?) ]]; then
-            echo "Manifest URL should point to an XML file (.xml)"
-            exit 1
+            echo "Manifest URL should point to an XML file (.xml)"; exit 1
           fi
         else
           if ! [[ "$manifest" =~ \.xml$ ]]; then
-            echo "Manifest filename must end with .xml"
-            exit 1
+            echo "Manifest filename must end with .xml"; exit 1
           fi
           if [[ "$manifest" =~ [[:space:]] ]]; then
-            echo "Manifest filename cannot contain spaces"
-            exit 1
+            echo "Manifest filename cannot contain spaces"; exit 1
           fi
         fi
-
+        # Optimize level validation
         case "$optimize" in
           O2|O3) ;;
-          *)
-            echo "optimize_level must be O2 or O3; got '$optimize'"
-            exit 1
-            ;;
+          *) echo "optimize_level must be O2 or O3; got '$optimize'"; exit 1 ;;
         esac
-
         echo "Input validation OK."
         echo "::endgroup::"
 
@@ -98,15 +91,25 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Cleanup space"
+        # Remove .NET SDKs
         sudo rm -rf /usr/share/dotnet
+        # Remove Swift toolchain
         sudo rm -rf /usr/share/swift
+        # Remove Haskell (GHC)
         sudo rm -rf /usr/local/.ghcup
+        # Remove Julia
         sudo rm -rf /usr/local/julia*
+        # Remove Android SDKs
         sudo rm -rf /usr/local/lib/android
+        # Remove Chromium (optional if not using for browser tests)
         sudo rm -rf /usr/local/share/chromium
+        # Remove Microsoft/Edge and Google Chrome builds
         sudo rm -rf /opt/microsoft /opt/google
+        # Remove Azure CLI
         sudo rm -rf /opt/az
+        # Remove PowerShell
         sudo rm -rf /usr/local/share/powershell
+        # Remove CodeQL and other toolcaches
         sudo rm -rf /opt/hostedtoolcache
         docker system prune -af || true
         docker builder prune -af || true
@@ -130,9 +133,10 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        # Derive a unique build directory name
         CONFIG="$MODEL"
         echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
-
+        # Install repo tool if missing
         REPO="/usr/local/bin/repo"
         if [ ! -x "$REPO" ]; then
           curl -s https://storage.googleapis.com/git-repo-downloads/repo -o "$REPO"
@@ -148,19 +152,18 @@ runs:
         mkdir -p "$CONFIG"
         cd "$CONFIG"
         echo "Initializing and syncing kernel source..."
-
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
-
         "$REPO" --version
         success=false
         for i in 1 2 3; do
-          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
+          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
+             -j"$(nproc --all)" --fail-fast; then
             success=true
             break
           fi
@@ -177,36 +180,27 @@ runs:
         ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
         mkdir -p "$ARTIFACTS_DIR"
         cd "$CONFIG_DIR/kernel_platform/msm-kernel"
-
         CONFIG_FILES=("build.config.common" "build.config.constants")
         BRANCH_LINE=""
         for f in "${CONFIG_FILES[@]}"; do
           if [ -f "$f" ]; then
             l=$(grep '^[[:space:]]*BRANCH=' "$f" || true)
-            if [ -n "$l" ]; then
-              BRANCH_LINE="$l"
-              break
-            fi
+            if [ -n "$l" ]; then BRANCH_LINE="$l"; break; fi
           fi
         done
-
         if [ -z "$BRANCH_LINE" ]; then
-          echo "Error: No BRANCH= found"
-          exit 1
+          echo "Error: No BRANCH= found"; exit 1
         fi
-
         BRANCH_VALUE="${BRANCH_LINE#*=}"
         ANDROID_VERSION="${BRANCH_VALUE%-*}"
         if [ -z "$ANDROID_VERSION" ]; then
           echo "Could not parse android version from BRANCH=$BRANCH_VALUE"
           exit 1
         fi
-
         VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
         PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
         SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
         FULL_VERSION="$VERSION.$PATCHLEVEL.$SUBLEVEL"
-
         cd "$ARTIFACTS_DIR"
         echo "ANDROID_VER=$ANDROID_VERSION" >> "$GITHUB_ENV"
         echo "KERNEL_VER=$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
@@ -223,6 +217,13 @@ runs:
         job-summary: 'CCache stats'
         evict-old-files: 'job'
 
+    - name: Clone kernel patches for msm kernel
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Cloning kernel patches for msm kernel..."
+        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
+
     - name: Clean Up ABI Protected Exports
       shell: bash
       run: |
@@ -231,132 +232,99 @@ runs:
         rm -f msm-kernel/android/abi_gki_protected_exports_* || true
         df -h
 
-    # ──────────────────────────────────────────────────────────────────
-    # 1. ՏԵՂԱԴՐԵԼ MT76-Ը (ՄԻՆՉ MERGE-Ը)
-    # ──────────────────────────────────────────────────────────────────
-    - name: Replace mt76 with prepared zip tree
-      shell: bash
-      run: |
-          set -euo pipefail
-          KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-          MSM="$KERNEL_PATH/msm-kernel"
-          TMPDIR="$(mktemp -d)"
-
-          cd "$MSM/drivers/net/wireless/mediatek"
-          rm -rf mt76
-
-          curl -L \
-            -o "$TMPDIR/mt76.zip" \
-            https://github.com/docdry0001/EmberHeart_OnePlus11/raw/refs/heads/main/.github/mt76.zip
-
-          unzip -q "$TMPDIR/mt76.zip" -d "$TMPDIR"
-
-          test -d "$TMPDIR/mt76" || { echo "mt76 directory not found in zip"; exit 1; }
-          test -f "$TMPDIR/mt76/Makefile" || { echo "mt76 Makefile not found"; exit 1; }
-          test -f "$TMPDIR/mt76/Kconfig" || { echo "mt76 Kconfig not found"; exit 1; }
-
-          mv "$TMPDIR/mt76" ./mt76
-
-          echo "[+] mt76 tree replaced successfully"
-          rm -rf "$TMPDIR"
-
-    # ──────────────────────────────────────────────────────────────────
-    # 2. MERGE (ՀԻՄԱ ԱՐԴԵՆ ՏԵՍՆՈՒՄ Է MT76/KCONFIG-Ը)
-    # ──────────────────────────────────────────────────────────────────
     - name: Merge
       shell: bash
       run: |
-          set -euo pipefail
-          KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-          MSM="$KERNEL_PLATFORM/msm-kernel"
-          OUT=out
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        OUT=out
 
-          cd "$MSM"
-          make ARCH=arm64 mrproper
-          mkdir -p "$OUT"
+        cd "$MSM"
 
-          ./scripts/kconfig/merge_config.sh -O "$OUT" -m \
-            arch/arm64/configs/gki_defconfig \
-            arch/arm64/configs/vendor/${SOC}_GKI.config
+        make ARCH=arm64 mrproper
+        mkdir -p "$OUT"
 
-          cp "$OUT/.config" arch/arm64/configs/gki_defconfig
-          rm "$OUT/.config"
+        # Merge defconfig fragments from vendor/$SOC_GKI.config
+        ./scripts/kconfig/merge_config.sh -O "$OUT" -m arch/arm64/configs/gki_defconfig arch/arm64/configs/vendor/${SOC}_GKI.config
 
-    # ──────────────────────────────────────────────────────────────────
-    # 3. ԱՎԵԼԱՑՆԵԼ WI-FI CONFIG-ՆԵՐԸ
-    # ──────────────────────────────────────────────────────────────────
-    - name: Add Wi-Fi drivers already present in kernel to be built as modules
+        cp "$OUT/.config" arch/arm64/configs/gki_defconfig
+        rm "$OUT/.config"
+
+
+    # - name: Add mt76 modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    #     MSM="$KERNEL_PATH/msm-kernel"
+    #     cd "$MSM/drivers/net/wireless"
+    #     rm -rf mediatek 
+    #     git clone -b mediatek https://github.com/docdry0001/mt7921.git
+    #     mv mt7921 mediatek 
+        
+    - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
-          set -euo pipefail
-          KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-          MSM="$KERNEL_PATH/msm-kernel"
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM"
+        # Realtek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_REALTEK
+        # Mediatek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CPTCFG_MT76_PCI \
+          --module CONFIG_MT76_SDIO \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x2E \
+          --module CONFIG_MT76x2U \
+          --module CONFIG_MT7921_COMMON \
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921S \
+          --module CONFIG_MT7921U
+        # Other configs
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --module CONFIG_MAC80211_LEDS \
+          --module CONFIG_CAN_SLCAN
 
-          cd "$MSM"
-          chmod +x ./scripts/config
 
-          # Vendor groups
-          ./scripts/config --file arch/arm64/configs/gki_defconfig \
-            --enable CONFIG_WLAN \
-            --enable CONFIG_WLAN_VENDOR_ATH \
-            --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-            --enable CONFIG_WLAN_VENDOR_RALINK \
-            --enable CONFIG_WLAN_VENDOR_REALTEK
-
-          # Core wireless deps
-          ./scripts/config --file arch/arm64/configs/gki_defconfig \
-            --enable CONFIG_CFG80211 \
-            --enable CONFIG_MAC80211 \
-            --enable CONFIG_USB
-
-          # Atheros
-          ./scripts/config --file arch/arm64/configs/gki_defconfig \
-            --module CONFIG_ATH_COMMON \
-            --module CONFIG_ATH9K_HW \
-            --module CONFIG_ATH9K_COMMON \
-            --module CONFIG_ATH9K \
-            --module CONFIG_ATH9K_HTC \
-            --module CONFIG_ATH10K \
-            --module CONFIG_ATH10K_USB
-
-          # MediaTek / mt76 / mt7921
-          ./scripts/config --file arch/arm64/configs/gki_defconfig \
-            --module CONFIG_MT7601U \
-            --module CPTCFG_MT76_CORE \
-            --module CPTCFG_MT76_USB \
-            --module CPTCFG_MT76x02_LIB \
-            --module CPTCFG_MT76x02_USB \
-            --module CPTCFG_MT76_CONNAC_LIB \
-            --module CPTCFG_MT7603E \
-            --module CPTCFG_MT76x2_COMMON \
-            --module CPTCFG_MT76x0_COMMON \
-            --module CPTCFG_MT7615_COMMON \
-            --module CPTCFG_MT7915E \
-            --module CPTCFG_MT7921_COMMON \
-            --module CPTCFG_MT7921E \
-            --module CPTCFG_MT7921S \
-            --module CPTCFG_MT7921U
-
-          # Ralink / rt2x00 / rt2800usb
-          ./scripts/config --file arch/arm64/configs/gki_defconfig \
-            --module CONFIG_RT2X00 \
-            --module CONFIG_RT2X00_LIB \
-            --module CONFIG_RT2X00_LIB_FIRMWARE \
-            --module CONFIG_RT2X00_USB \
-            --module CONFIG_RT2800LIB \
-            --module CONFIG_RT2800USB \
-            --module CONFIG_RT2800USB_RT33XX \
-            --module CONFIG_RT2800USB_RT35XX \
-            --module CONFIG_RT2800USB_RT3573 \
-            --module CONFIG_RT2800USB_RT53XX \
-            --module CONFIG_RT2800USB_RT55XX \
-            --module CONFIG_RT2800USB_UNKNOWN
-
-          # Other
-          ./scripts/config --file arch/arm64/configs/gki_defconfig \
-            --module CONFIG_MAC80211_LEDS \
-            --module CONFIG_CAN_SLCAN
-
+    - name: Add memkernel module
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM"
+        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
+        
+    - name: Add my kernel patches to msm kernel
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Applying kernel patches to msm kernel from my repo..."
+        cd "$CONFIG/kernel_platform/msm-kernel"
+    
+        shopt -s nullglob
+        PATCHES=(../../../my_patches/kernel_patches/op11/msm/*.patch)
+    
+        if [ ${#PATCHES[@]} -eq 0 ]; then
+          echo "[!] No OP11 msm patches found, skipping."
+        else
+          for patch_file in "${PATCHES[@]}"; do
+            echo "Applying patch: $patch_file"
+            patch -p1 < "$patch_file"
+          done
+        fi
+    
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -368,7 +336,12 @@ runs:
         sed -i '/bool scan_adjusted = false;/d' vmscan.c
 
         echo "[+] Patching exact declaration block in shrink_lruvec()..."
+
         perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
+
+        echo "[+] Verifying..."
+        grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
+        grep -n "scan_adjusted" vmscan.c | head -20
 
     - name: FIX thermal kvzalloc kvfree (waipio)
       if: env.SOC == 'waipio'
@@ -378,6 +351,7 @@ runs:
         export FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
 
         echo "[+] Patching $FILE"
+
         python3 - <<'PY'
         import os
         from pathlib import Path
@@ -406,6 +380,10 @@ runs:
         path.write_text(text)
         PY
 
+        echo "[+] Verifying thermal fix..."
+        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
+
+    
     - name: FIX binder mmget_still_valid compat (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -426,24 +404,17 @@ runs:
         grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
           perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
 
-    - name: Add rtl8812au external driver
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        DRIVER_DIR="$KERNEL_PATH/external/rtl8812au"
-
-        rm -rf "$DRIVER_DIR"
-        mkdir -p "$KERNEL_PATH/external"
-        git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git "$DRIVER_DIR"
-
+        echo "[+] Verifying binder fix..."
+        grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
+        grep -n 'mmget_still_valid' "$FILE" | head -20   
+        
+        
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
         set -euo pipefail
         KP="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         CLANG_FOUND=false
-
         for base in "$KP/prebuilts" "$KP/prebuilts-master"; do
           [ -d "$base/clang/host/linux-x86" ] || continue
           latest=$(ls -d "$base"/clang/host/linux-x86/clang-r*/ 2>/dev/null | sort -V | tail -n1 || true)
@@ -452,13 +423,11 @@ runs:
             CLANG_FOUND=true
           fi
         done
-
         if ! $CLANG_FOUND && command -v clang >/dev/null 2>&1; then
           CLANG_BIN="$(dirname "$(command -v clang)")"
           CLANG_FOUND=true
           echo "Using system clang."
         fi
-
         $CLANG_FOUND || { echo "No clang toolchain found"; exit 1; }
         echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
         CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
@@ -472,7 +441,7 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
-
+        
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
 
@@ -495,7 +464,7 @@ runs:
           STRIP=llvm-strip
           HOSTCC=clang
           HOSTCXX=clang++
-          CC="ccache clang"
+          CC=ccache\ clang
         )
 
         OUT=out
@@ -504,74 +473,161 @@ runs:
 
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
-        # ──────────────────────────────────────────────────────────────
-        # ԱՊԱՀՈՎԱԳՐԵԼ, ՈՐ MT76_CORE-Ը ՄԻԱՑԱԾ Է
-        # ──────────────────────────────────────────────────────────────
-        ./scripts/config --file "$OUT/.config" \
-          --enable CONFIG_LTO_CLANG_THIN \
-          --enable CONFIG_LTO_CLANG \
-          --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
-          --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
-
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-
-        # Ստիպողաբար միացնում ենք, եթե olddefconfig-ը հանել է
-        if ! grep -q '^CONFIG_MT76_CORE=m' "$OUT/.config"; then
-          echo "::warning::MT76_CORE not set to m, forcing it"
-          ./scripts/config --file "$OUT/.config" --module CONFIG_MT76_CORE
-          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-        fi
-
-        echo "[!] Final CONFIG_MT76_CORE:"
-        grep 'CONFIG_MT76_CORE' "$OUT/.config" || echo "ERROR: MT76_CORE is not set!"
+        ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
         echo "Building in-tree kernel modules..."
+        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
-        echo "Building external rtl8812au..."
-        RTL8812AU_DIR="$KERNEL_PLATFORM/external/rtl8812au"
-        if [ -d "$RTL8812AU_DIR" ] && [ -f "$RTL8812AU_DIR/Makefile" ]; then
-          if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules; then
-            echo "Build failed for rtl8812au, skipping"
-          else
-            if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
-              echo "Install failed for rtl8812au, skipping"
-            fi
+        cd "$KERNEL_PLATFORM"
+
+        mkdir -p "$KERNEL_PLATFORM/oplus/config"
+        touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
+
+        mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
+        printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
+
+        MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
+
+        mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
+
+        OPLUS_FLAGS=(
+          CHIPSET_COMPANY=QCOM
+          OPLUS_VND_BUILD_PLATFORM="$SOC"
+        )
+
+        EXT_QCOM=(
+          ../vendor/qcom/opensource/mmrm-driver
+          ../vendor/qcom/opensource/mm-drivers/hw_fence
+          ../vendor/qcom/opensource/mm-drivers/sync_fence
+          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
+          ../vendor/qcom/opensource/securemsm-kernel
+          ../vendor/qcom/opensource/display-drivers/msm
+          ../vendor/qcom/opensource/audio-kernel
+          ../vendor/qcom/opensource/camera-kernel
+          ../vendor/oplus/kernel/explorer
+          ../vendor/qcom/opensource/video-driver
+          ../vendor/qcom/opensource/graphics-kernel
+          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
+          ../vendor/qcom/opensource/datarmnet/core
+          ../vendor/qcom/opensource/datarmnet-ext/aps
+          ../vendor/qcom/opensource/datarmnet-ext/offload
+          ../vendor/qcom/opensource/datarmnet-ext/shs
+          ../vendor/qcom/opensource/datarmnet-ext/sch
+          ../vendor/qcom/opensource/datarmnet-ext/perf
+          ../vendor/qcom/opensource/datarmnet-ext/perf_tether
+          ../vendor/qcom/opensource/datarmnet-ext/wlan
+          ../vendor/qcom/opensource/eva-kernel
+          ../vendor/qcom/opensource/wlan/platform
+          ../vendor/qcom/opensource/bt-kernel
+          ../vendor/nxp/opensource/driver
+          ../vendor/st/opensource/driver
+          ../vendor/st/opensource/eSE-driver
+          ../vendor/qcom/opensource/wlan/qcacld-3.0
+        )
+
+        MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
+
+        build_external_module() {
+          local module="$1"
+          local extra_syms=()
+
+          echo "==== Processing module: $module ===="
+
+          if [ ! -d "$module" ]; then
+            echo "Skipping missing module dir: $module"
+            return 0
           fi
-        else
-          echo "rtl8812au source missing or Makefile missing, skipping"
-        fi
 
-    - name: Filter modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT="$MSM/out"
-        UNAME=$(ls "$OUT/lib/modules/")
+          if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
+            echo "Skipping module without Makefile/Kbuild: $module"
+            return 0
+          fi
 
-        echo "Copying all modules to $OUT/modules"
-        cd "$OUT"
-        mkdir -p modules
-        find lib/modules/"$UNAME" -type f -name '*.ko' -exec cp {} modules/ \;
-        echo "Total modules copied: $(find modules -type f -name '*.ko' | wc -l)"
+          if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
+            extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
+            echo "Using mmrm Module.symvers for $module"
+          fi
 
-        echo "Keeping Wi-Fi related modules only..."
-        cd modules
-        find . -type f -name '*.ko' \
-          ! -name 'ath*.ko' \
-          ! -name 'rt*.ko' \
-          ! -name 'rtl*.ko' \
-          ! -name '8812au*.ko' \
-          ! -name '88XXau*.ko' \
-          ! -name 'mt*.ko' \
-          ! -name 'mac80211*.ko' \
-          ! -name 'cfg80211*.ko' \
-          -delete
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" modules; then
+            echo "Build failed, skipping module: $module"
+            return 0
+          fi
 
-        echo "Modules remaining after filtering: $(find . -type f -name '*.ko' | wc -l)"
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+            echo "Install failed, skipping module: $module"
+            return 0
+          fi
+        }
+
+        for MODULE in "${EXT_OPLUS[@]}"; do
+          [ -n "$MODULE" ] || continue
+          build_external_module "$MODULE"
+        done
+
+        for MODULE in "${EXT_QCOM[@]}"; do
+          build_external_module "$MODULE"
+        done
+        
+      # - name: Clone and build rtl8812au driver
+      #   shell: bash
+      #   run: |
+      #     set -euo pipefail
+      #     # Clone the driver outside kernel tree
+      #     VENDOR_REALTEK="$GITHUB_WORKSPACE/$CONFIG/vendor/realtek"
+      #     mkdir -p "$VENDOR_REALTEK"
+      #     cd "$VENDOR_REALTEK"
+      #     git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git
+      #     cd rtl8812au
+      #     sed -i 's/^CONFIG_PLATFORM_ARM_AARCH64 = n/CONFIG_PLATFORM_ARM_AARCH64 = y/' Makefile
+      #     # Path to the configured kernel output (msm-kernel/out)
+      #     KSRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+      #     INSTALL_MOD_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+      #     # Build
+      #     make clean
+      #     make ARCH=arm64 \
+      #     CROSS_COMPILE=aarch64-linux-gnu- \
+      #     KSRC="$KSRC" \
+      #     KCFLAGS='-Wno-error' \
+      #     -j"$(nproc --all)" \
+      #     modules
+      #     # Install so that later "Filter modules" can pick it up
+      #     make ARCH=arm64 \
+      #     CROSS_COMPILE=aarch64-linux-gnu- \
+      #     KSRC="$KSRC" \
+      #     INSTALL_MOD_PATH="$INSTALL_MOD_PATH" \
+      #     modules_install
+        
+    # - name: Filter modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    #     MSM="$KERNEL_PLATFORM/msm-kernel"
+    #     OUT="$MSM/out"
+    #     UNAME=$(ls "$OUT/lib/modules/")
+
+    #     echo "Copying all modules to $OUT/modules"
+    #     cd "$OUT"
+    #     mkdir -p modules
+    #     find lib/modules/"$UNAME" -type f -name '*.ko' -exec cp {} modules/ \;
+    #     echo "Total modules copied: $(find modules -type f -name '*.ko' | wc -l)"
+
+    #     echo "Removing unnecessary modules..."
+    #     cd modules
+    #     # Download default module list
+    #     curl -L -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
+    #     # Remove modules in the default list
+
+    #     while IFS= read -r module; do
+    #       if [ -e "$module" ]; then
+    #         rm -f "$module"
+    #         echo "Removed module: $module"
+    #       fi
+    #     done < default_modules.txt
+    #     cd ..
+    #     echo "Modules remaining after filtering: $(find modules -type f -name '*.ko' | wc -l)"
 
     - name: Create Kernel Modules zip
       id: create_zip
@@ -584,7 +640,6 @@ runs:
         OUT="$MSM/out"
         MODULES_SRC="$OUT/modules"
         MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
-
         mkdir -p "$CONFIG_DIR/artifacts"
         find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
         echo "Packaged kernel modules to $MODULES_ZIP"
