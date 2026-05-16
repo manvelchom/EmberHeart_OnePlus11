@@ -258,9 +258,10 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/mediatek"
-        rm -rf mt76
-        git clone -b wed https://github.com/openwrt/mt76.git
+        cd "$MSM/drivers/net/wireless"
+        rm -rf mediatek 
+        git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git
+        mv mt7921 mediatek 
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
