@@ -772,15 +772,6 @@ runs:
         echo "Boot image created ✅"
         echo "::endgroup::"
         
-    - name: Collect Build Stats
-      id: collect_stats
-      shell: bash
-      run: |
-        IMG="$COMMON_KERNEL_FOLDER/out/arch/arm64/boot/Image"
-        IMG_SHA256=$(sha256sum "$IMG" | awk '{print $1}')
-        WARNINGS_COUNT=$(grep -ci warning "$COMMON_KERNEL_FOLDER/build.log" 2>/dev/null || echo 0)
-        echo "image_sha256=$IMG_SHA256" >> "$GITHUB_OUTPUT"
-        echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
 
     - name: List artifacts folder
       if: always()
