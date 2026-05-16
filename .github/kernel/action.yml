@@ -753,6 +753,7 @@ runs:
         cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
         echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
@@ -767,6 +768,42 @@ runs:
         echo "zip_sha256=$ZIP_SHA256" >> "$GITHUB_OUTPUT"
         echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
+    - name: Create Boot Image
+      if: success() && steps.create_zip.conclusion == 'success'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Creating boot image..."
+        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
+        IMAGE="$CONFIG_DIR/kernel_platform/common/out/arch/arm64/boot/Image"
+
+        cd "$GITHUB_WORKSPACE"
+        mkdir -p boot
+        # Download stock boot image
+        python3 -m pip install --user gdown
+        python3 -m gdown 1DgD6wTSZ-r4zklYzA_x7GYcjwfA9WV0x
+        unzip boot.zip
+        # Download magiskboot binary
+        wget https://github.com/magojohnji/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot
+
+        BOOT=$(ls | grep -E '*.img')
+        MAGISKBOOT="./magiskboot"
+
+        chmod +x $MAGISKBOOT
+
+        echo -n "Unpacking boot image..."
+        $MAGISKBOOT unpack $BOOT
+        echo -n "Adding kernel to boot image..."
+        mv -f $IMAGE kernel
+        echo -n "Repacking boot image..."
+        $MAGISKBOOT repack $BOOT
+
+        mv -f new-boot.img EmberHeart_boot.img
+        cp EmberHeart_boot.img "$CONFIG_DIR/artifacts/"
+
+        echo "Boot image created ✅"
+        echo "::endgroup::"
+        
     - name: Collect Build Stats
       id: collect_stats
       shell: bash
