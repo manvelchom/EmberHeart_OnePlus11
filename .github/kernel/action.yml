@@ -327,29 +327,86 @@ runs:
     - name: Add Nethunter Inline Configs
       shell: bash
       run: |
+        set -euo pipefail
+        echo "::group::Applying Nethunter configs..."
         cd "$COMMON_KERNEL_FOLDER"
-        cat >> arch/arm64/configs/gki_defconfig <<-EOF
-        	CONFIG_BT_HCIBTUSB=y
-        	CONFIG_BT_HCIBTUSB_BCM=y
-        	CONFIG_BT_HCIBTUSB_RTL=y
-        	CONFIG_USB_AIRSPY=y
-        	CONFIG_USB_HACKRF=y
-        	CONFIG_CAN=y
-        	CONFIG_CAN_DEV=y
-        	CONFIG_CAN_VCAN=y
-        	CONFIG_CAN_8DEV_USB=y
-        	CONFIG_CAN_EMS_USB=y
-        	CONFIG_CAN_GS_USB=y
-        	CONFIG_CAN_PEAK_USB=y
-        	CONFIG_NETLINK_DIAG=y
-        	CONFIG_VSOCKETS=y
-        	CONFIG_USB_SERIAL=y
-        	CONFIG_USB_SERIAL_CONSOLE=y
-        	CONFIG_USB_SERIAL_GENERIC=y
-        	CONFIG_USB_SERIAL_CH341=y
-        	CONFIG_USB_SERIAL_FTDI_SIO=y
-        	CONFIG_USB_SERIAL_PL2303=y
-        EOF
+
+        # Bluetooth configs
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_BT_HCIBTUSB \
+          --enable CONFIG_BT_HCIBTUSB_BCM \
+          --enable CONFIG_BT_HCIBTUSB_RTL \
+          --enable CONFIG_BT_HCIVHCI \
+          --enable CONFIG_BT_HCIBCM203X \
+          --enable CONFIG_BT_HCIBPA10X \
+          --enable CONFIG_BT_HCIBFUSB
+
+        # Airspy & HackRF
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_USB_AIRSPY \
+          --enable CONFIG_USB_HACKRF
+
+        # CAN
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN \
+          --enable CONFIG_CAN_DEV \
+          --enable CONFIG_CAN_CALC_BITTIMING \
+          --enable CONFIG_CAN_LEDS \
+          --enable CONFIG_CAN_VCAN \
+          --enable CONFIG_CAN_GRCAN \
+          --enable CONFIG_CAN_XILINXCAN
+
+        # Bosch C_CAN/D_CAN devices
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_C_CAN \
+          --enable CONFIG_CAN_C_CAN_PLATFORM \
+          --enable CONFIG_CAN_C_CAN_PCI
+
+        # Bosch CC770 and Intel AN82527 devices
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_CC770 \
+          --enable CONFIG_CAN_CC770_ISA \
+          --enable CONFIG_CAN_CC770_PLATFORM
+
+        # Bosch M_CAN devices
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_M_CAN \
+          --enable CONFIG_CAN_M_CAN_PCI \
+          --enable CONFIG_CAN_M_CAN_PLATFORM \
+          --enable CONFIG_CAN_M_CAN_TCAN4X5X
+
+        # CAN SPI interfaces
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_HI311X \
+          --enable CONFIG_CAN_MCP251X
+
+        # CAN USB interfaces
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_8DEV_USB \
+          --enable CONFIG_CAN_EMS_USB \
+          --enable CONFIG_CAN_ESD_USB2 \
+          --enable CONFIG_CAN_GS_USB \
+          --enable CONFIG_CAN_KVASER_USB \
+          --enable CONFIG_CAN_PEAK_USB
+
+        # CAN - Networking
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_NETLINK_DIAG \
+          --enable CONFIG_VSOCKETS \
+          --enable CONFIG_NET_SCHED \
+          --enable CONFIG_NET_EMATCH_CANID
+
+        # USB Serial Converter
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_USB_SERIAL \
+          --enable CONFIG_USB_SERIAL_CONSOLE \
+          --enable CONFIG_USB_SERIAL_GENERIC \
+          --enable CONFIG_USB_SERIAL_CH341 \
+          --enable CONFIG_USB_SERIAL_FTDI_SIO \
+          --enable CONFIG_USB_SERIAL_PL2303
+
+        echo "Nethunter configs applied ✅"
+        echo "::endgroup::"
 
     - name: Add TTL Support
       shell: bash
