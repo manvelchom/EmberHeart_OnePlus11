@@ -33,7 +33,7 @@ inputs:
     description: 'Custom kernel localversion string'
     required: false
     type: string
-    default: "docEmberHeartdry"
+    default: "EmberHeart"
   backports_release:
     description: 'Backports release version (git branch)'
     required: false
@@ -123,9 +123,9 @@ runs:
         if [[ "$OP_MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --location --proto '=https' "$OP_MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         success=false
         for i in 1 2 3; do
@@ -323,57 +323,34 @@ runs:
           "$KERNEL_PATCHES_FOLDER/common/reduce_freeze_timeout.patch"; do
           patch -p1 --forward < "$patch" || true
         done
-        
-    - name: Add mt76 modules
-      shell: bash
-      run: |
-        cd "$COMMON_KERNEL_FOLDER/drivers/net/wireless"
-        rm -rf mediatek
-        git clone -b mediatek https://github.com/docdry0001/mt7921.git
-        mv mt7921 mediatek
-        
+
     - name: Add Nethunter Inline Configs
       shell: bash
       run: |
         cd "$COMMON_KERNEL_FOLDER"
-        cat >> arch/arm64/configs/gki_defconfig <<-'EOF'
-        CONFIG_BT_HCIBTUSB=y
-        CONFIG_BT_HCIBTUSB_BCM=y
-        CONFIG_BT_HCIBTUSB_RTL=y
-        CONFIG_USB_AIRSPY=y
-        CONFIG_USB_HACKRF=y
-        CONFIG_CAN=y
-        CONFIG_CAN_DEV=y
-        CONFIG_CAN_VCAN=y
-        CONFIG_CAN_8DEV_USB=y
-        CONFIG_CAN_EMS_USB=y
-        CONFIG_CAN_GS_USB=y
-        CONFIG_CAN_PEAK_USB=y
-        CONFIG_NETLINK_DIAG=y
-        CONFIG_VSOCKETS=y
-        CONFIG_USB_SERIAL=y
-        CONFIG_USB_SERIAL_CONSOLE=y
-        CONFIG_USB_SERIAL_GENERIC=y
-        CONFIG_USB_SERIAL_CH341=y
-        CONFIG_USB_SERIAL_FTDI_SIO=y
-        CONFIG_USB_SERIAL_PL2303=y
-        CONFIG_WLAN_VENDOR_MEDIATEK=y
-        CONFIG_MT76_CORE=m
-        CONFIG_MT76_LEDS=y
-        CONFIG_MT76_USB=m
-        CONFIG_MT76_SDIO=m
-        CONFIG_MT76x02_LIB=m
-        CONFIG_MT76x02_USB=m
-        CONFIG_MT76_CONNAC_LIB=m
-        CONFIG_MT76x2_COMMON=m
-        CONFIG_MT76x2E=m
-        CONFIG_MT76x2U=m
-        CONFIG_MT7921_COMMON=m
-        CONFIG_MT7921E=m
-        CONFIG_MT7921S=m
-        CONFIG_MT7921U=m
+        cat >> arch/arm64/configs/gki_defconfig <<-EOF
+        	CONFIG_BT_HCIBTUSB=y
+        	CONFIG_BT_HCIBTUSB_BCM=y
+        	CONFIG_BT_HCIBTUSB_RTL=y
+        	CONFIG_USB_AIRSPY=y
+        	CONFIG_USB_HACKRF=y
+        	CONFIG_CAN=y
+        	CONFIG_CAN_DEV=y
+        	CONFIG_CAN_VCAN=y
+        	CONFIG_CAN_8DEV_USB=y
+        	CONFIG_CAN_EMS_USB=y
+        	CONFIG_CAN_GS_USB=y
+        	CONFIG_CAN_PEAK_USB=y
+        	CONFIG_NETLINK_DIAG=y
+        	CONFIG_VSOCKETS=y
+        	CONFIG_USB_SERIAL=y
+        	CONFIG_USB_SERIAL_CONSOLE=y
+        	CONFIG_USB_SERIAL_GENERIC=y
+        	CONFIG_USB_SERIAL_CH341=y
+        	CONFIG_USB_SERIAL_FTDI_SIO=y
+        	CONFIG_USB_SERIAL_PL2303=y
         EOF
-    
+
     - name: Add TTL Support
       shell: bash
       run: |
@@ -470,8 +447,7 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
-        make -j$(nproc --all) O="$OUT" modules   
-           
+    
     - name: Build Linux Headers .deb Package
       if: success()
       shell: bash
@@ -721,7 +697,6 @@ runs:
         cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
         echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
-        
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
@@ -736,55 +711,21 @@ runs:
         echo "zip_sha256=$ZIP_SHA256" >> "$GITHUB_OUTPUT"
         echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
-    - name: Create Boot Image
-      if: success() && steps.create_zip.conclusion == 'success'
+    - name: Collect Build Stats
+      id: collect_stats
       shell: bash
       run: |
-        set -euo pipefail
-        echo "::group::Creating boot image..."
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        IMAGE="$CONFIG_DIR/kernel_platform/common/out/arch/arm64/boot/Image"
-
-        cd "$GITHUB_WORKSPACE"
-        mkdir -p boot
-        # Download stock boot image
-        python3 -m pip install --user gdown
-        python3 -m gdown 1DgD6wTSZ-r4zklYzA_x7GYcjwfA9WV0x
-        unzip boot.zip
-        # Download magiskboot binary
-        wget https://github.com/magojohnji/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot
-
-        BOOT=$(ls | grep -E '*.img')
-        MAGISKBOOT="./magiskboot"
-
-        chmod +x $MAGISKBOOT
-
-        echo -n "Unpacking boot image..."
-        $MAGISKBOOT unpack $BOOT
-        echo -n "Adding kernel to boot image..."
-        mv -f $IMAGE kernel
-        echo -n "Repacking boot image..."
-        $MAGISKBOOT repack $BOOT
-
-        mv -f new-boot.img EmberHeart_boot.img
-        cp EmberHeart_boot.img "$CONFIG_DIR/artifacts/"
-
-        echo "Boot image created ✅"
-        echo "::endgroup::"
-        
-
-    - name: List artifacts folder
-      if: always()
-      shell: bash
-      run: |
-        echo "Contents of $ARTIFACTS_FOLDER:"
-        ls -la "$ARTIFACTS_FOLDER"
+        IMG="$COMMON_KERNEL_FOLDER/out/arch/arm64/boot/Image"
+        IMG_SHA256=$(sha256sum "$IMG" | awk '{print $1}')
+        WARNINGS_COUNT=$(grep -ci warning "$COMMON_KERNEL_FOLDER/build.log" 2>/dev/null || echo 0)
+        echo "image_sha256=$IMG_SHA256" >> "$GITHUB_OUTPUT"
+        echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-${{ env.CONFIG }}
-        path: |
-          ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-          ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
-          ${{ env.ARTIFACTS_FOLDER }}/mediatek-wifi-modules.zip
+       name: kernel-${{ env.CONFIG }}
+       path: |
+            ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+            ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+            ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
