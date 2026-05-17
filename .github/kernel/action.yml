@@ -404,40 +404,28 @@ runs:
           --enable CONFIG_USB_SERIAL_CH341 \
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
-          
-        # ATH drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_ATH \
-          --module CONFIG_ATH_COMMON \
-          --module CONFIG_ATH9K \
-          --module CONFIG_ATH9K_HW \
-          --module CONFIG_ATH9K_HTC \
-          --module CONFIG_ATH9K_COMMON \
-          --module CONFIG_ATH10K \
-          --module CONFIG_ATH10K_USB \
-          --module CONFIG_ATH11K
 
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E
+          --enable CONFIG_MT7601U \
+          --enable CONFIG_MT76_CORE \
+          --enable CONFIG_MT76_CORE \
+          --enable CONFIG_MT76_USB \
+          --enable CONFIG_MT76x02_LIB \
+          --enable CONFIG_MT76x02_USB \
+          --enable CONFIG_MT76_CONNAC_LIB \
+          --enable CONFIG_MT7603E \
+          --enable CONFIG_MT76x2_COMMON \
+          --enable CONFIG_MT76x0_COMMON \
+          --enable CONFIG_MT7615_COMMON \
+          --enable CONFIG_MT7915E \
+          --enable CONFIG_MT7921E
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CAN_SLCAN
+          --enable CONFIG_MAC80211_LEDS \
+          --enable CONFIG_CAN_SLCAN
           
         echo "Nethunter configs applied ✅"
         echo "::endgroup::"
