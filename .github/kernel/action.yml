@@ -34,6 +34,11 @@ inputs:
     required: false
     type: string
     default: "EmberHeart"
+  backports_release:
+    description: 'Backports release version (git branch)'
+    required: false
+    type: string
+    default: backports-6.1.97-1
 
 outputs:
   kernel_version:
@@ -249,7 +254,7 @@ runs:
         	CONFIG_KSU_KPROBES_HOOK=n
         EOF
 
-    - name: Apply SUSFS Patches (v2.1.0) – fixed for KSU 3.2.0
+    - name: Apply SUSFS Patches (v2.1.0)
       shell: bash
       run: |
         cd "$KERNEL_PLATFORM_FOLDER"
@@ -258,38 +263,21 @@ runs:
         susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
         echo "SUSVER=$susfs_version" >> $GITHUB_ENV
         cd "$KSUN_FOLDER"
-    
-        # Main enable patch
         patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
-    
-        # Fix patches for any rejected hunks
-        for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \; 2>/dev/null); do
-          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch" || true
+        for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
         done
-    
-        # Additional patches (non-interactive)
-        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch" || true
-        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch" || true
-    
+        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
         if [ "$KSUVER" -le 33095 ]; then
-          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch" || true
+          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
         fi
-    
-        # ---- Fix implicit declarations for KSU 3.2.0 ----
+        # Fix implicit declarations
         cd kernel
-        # Disable SUSFS additions that are incompatible with KSU 3.2.0
-        sed -i '/ksu_syscall_hook_init();/d' core/init.c
-        sed -i '/ksu_syscall_hook_manager_init();/d' core/init.c
-        sed -i '/ksu_syscall_hook_manager_exit();/d' core/init.c
-        sed -i '/ksu_late_loaded/d' core/init.c
         sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
         sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' core/init.c
-        # Also fix setuid_hook.c if needed
-        sed -i 's/ksu_handle_extra_susfs_work();/\/\* SUSFS fix \*\/ \/\/ ksu_handle_extra_susfs_work();/' hook/setuid_hook.c
-    
         cd "$COMMON_KERNEL_FOLDER"
-        patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch" || true
-    
+        patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch"
         cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
         	CONFIG_KSU_SUSFS=y
         	CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
@@ -311,7 +299,7 @@ runs:
         	CONFIG_TMPFS_XATTR=y
         	CONFIG_TMPFS_POSIX_ACL=y
         EOF
-    
+
     - name: Add BBG
       shell: bash
       run: |
@@ -417,7 +405,7 @@ runs:
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
 
-        # Mediatek drivers – leave as built-in (y) in tree
+        # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --enable CONFIG_MT7601U \
@@ -440,7 +428,7 @@ runs:
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_MAC80211_LEDS \
           --enable CONFIG_CAN_SLCAN
-
+          
         echo "Nethunter configs applied ✅"
         echo "::endgroup::"
 
@@ -540,7 +528,7 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
-
+    
     - name: Build Linux Headers .deb Package
       if: success()
       shell: bash
@@ -553,8 +541,10 @@ runs:
         rm -rf "$HEADERS_DIR"
         mkdir -p "$HEADERS_DIR/DEBIAN"
         mkdir -p "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
+    
         # Install headers
         make O="$OUT" ARCH=arm64 headers_install INSTALL_HDR_PATH="$HEADERS_DIR/usr"
+    
         # Copy .config and Module.symvers (if exists)
         cp "$OUT/.config" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/.config"
         if [ -f "$OUT/Module.symvers" ]; then
@@ -562,6 +552,7 @@ runs:
         else
           echo "::warning::Module.symvers not found; headers package will lack symbol version info"
         fi
+    
         # Create control file
         cat > "$HEADERS_DIR/DEBIAN/control" <<-EOF
         Package: linux-headers-$KERNELRELEASE
@@ -572,6 +563,7 @@ runs:
          This package provides kernel header files for version $KERNELRELEASE,
          useful for building external kernel modules like DKMS or manual compilations.
         EOF
+    
         # Build .deb
         cd "$GITHUB_WORKSPACE"
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
@@ -582,16 +574,15 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        RELEASE="backports-6.1.97-1"
+        RELEASE="${{ inputs.backports_release }}"
         URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-        KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
-
+    
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
           export PATH="${CLANG_BIN_PATH}:$PATH"
         fi
         export PATH="/usr/lib/ccache:$PATH"
-
+    
         MAKE_FLAGS=(
           LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
           CLANG_TRIPLE=aarch64-linux-gnu-
@@ -602,81 +593,21 @@ runs:
           DEPMOD=depmod DTC=dtc STRIP=llvm-strip
           HOSTCC=clang HOSTCXX=clang++ CC=clang
         )
-
+    
         cd "$GITHUB_WORKSPACE"
         wget -q -O backports.tar.xz "$URL"
         tar -xf backports.tar.xz
         rm -rf backports-stable
         mv "$RELEASE" backports-stable
         cd backports-stable
-
+    
         # Patch CFI macro
         FILE="backport-include/linux/module.h"
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
-
-        # Fix missing ieee80211-ht.h
-        if [ -f "$KERNEL_SRC/include/uapi/linux/ieee80211-ht.h" ]; then
-          cp "$KERNEL_SRC/include/uapi/linux/ieee80211-ht.h" include/linux/
-        elif [ -f "$KERNEL_SRC/include/linux/ieee80211-ht.h" ]; then
-          cp "$KERNEL_SRC/include/linux/ieee80211-ht.h" include/linux/
-        else
-          touch include/linux/ieee80211-ht.h
-        fi
-
-        # Create missing args.h (empty – 5.10 already has __struct_group)
-        printf '%s\n' \
-          '#ifndef _BACKPORT_LINUX_ARGS_H' \
-          '#define _BACKPORT_LINUX_ARGS_H' \
-          '/* 5.10 already defines __struct_group, struct_group_attr */' \
-          '#endif /* _BACKPORT_LINUX_ARGS_H */' \
-          > backport-include/linux/args.h
-        echo "Created backport-include/linux/args.h"
-
-        # Stub for airoha_offload.h (needed by MT76)
-        mkdir -p backport-include/linux/soc/airoha
-        printf '%s\n' \
-          '/* SPDX-License-Identifier: GPL-2.0-only */' \
-          '#ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H' \
-          '#define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H' \
-          '' \
-          'struct airoha_offload_data { int dummy; };' \
-          'static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }' \
-          'static inline void airoha_offload_exit(struct airoha_offload_data *d) { }' \
-          '' \
-          '#endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */' \
-          > backport-include/linux/soc/airoha/airoha_offload.h
-        echo "Created airoha_offload.h stub"
-
-        # size_mul fix
-        sed -i '/^#include <linux\/types.h>/a #include <linux\/overflow.h>' backport-include/linux/string.h
-
-        # DEFINE_GUARD stub
-        printf '%s\n' \
-          '#ifndef _BACKPORT_LINUX_CLEANUP_H' \
-          '#define _BACKPORT_LINUX_CLEANUP_H' \
-          '' \
-          '#define DEFINE_GUARD(_name, _type, _lock, _unlock) \' \
-          '	static void _name##_cleanup(_type *t) { _unlock; } \' \
-          '	static _type *_name##_guard(_type *t) { return t; }' \
-          '' \
-          '#endif /* _BACKPORT_LINUX_CLEANUP_H */' \
-          > backport-include/linux/cleanup.h
-        echo "Created cleanup.h stub"
-
-        # timer_delete_sync stub
-        printf '%s\n' \
-          '#ifndef _BACKPORT_LINUX_TIMER_H' \
-          '#define _BACKPORT_LINUX_TIMER_H' \
-          '' \
-          '#define timer_delete_sync(t) timer_del_sync(t)' \
-          '' \
-          '#endif /* _BACKPORT_LINUX_TIMER_H */' \
-          > backport-include/linux/timer.h
-        echo "Created timer.h stub"
-
+    
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
-
+    
         # Full CPTCFG list via printf
         printf '%s\n' \
           'CPTCFG_CFG80211=m' \
@@ -720,45 +651,6 @@ runs:
           'CPTCFG_MT7925U=m' \
           'CPTCFG_MT7925E=m' \
           'CPTCFG_MT7996E=m' \
-          'CPTCFG_WLAN_VENDOR_REALTEK=y' \
-          'CPTCFG_RTLWIFI=m' \
-          'CPTCFG_RTLWIFI_DEBUG=y' \
-          'CPTCFG_RTL8192CE=m' \
-          'CPTCFG_RTL8192SE=m' \
-          'CPTCFG_RTL8192DE=m' \
-          'CPTCFG_RTL8723AE=m' \
-          'CPTCFG_RTL8723BE=m' \
-          'CPTCFG_RTL8188EE=m' \
-          'CPTCFG_RTL8192CU=m' \
-          'CPTCFG_RTL8192CC_COMMON=m' \
-          'CPTCFG_RTL8192EE=m' \
-          'CPTCFG_RTL8821AE=m' \
-          'CPTCFG_RTL8XXXU=m' \
-          'CPTCFG_RTL8XXXU_UNTESTED=y' \
-          'CPTCFG_RTL8180=m' \
-          'CPTCFG_RTL8187=m' \
-          'CPTCFG_RTW88=m' \
-          'CPTCFG_RTW88_CORE=m' \
-          'CPTCFG_RTW88_PCI=m' \
-          'CPTCFG_RTW88_USB=m' \
-          'CPTCFG_RTW88_8822B=m' \
-          'CPTCFG_RTW88_8822BU=m' \
-          'CPTCFG_RTW88_8822C=m' \
-          'CPTCFG_RTW88_8822CU=m' \
-          'CPTCFG_RTW88_8723D=m' \
-          'CPTCFG_RTW88_8723DU=m' \
-          'CPTCFG_RTW88_8821C=m' \
-          'CPTCFG_RTW88_8821CU=m' \
-          'CPTCFG_RTW88_8723X=m' \
-          'CPTCFG_RTW88_8723XU=m' \
-          'CPTCFG_RTW89=m' \
-          'CPTCFG_RTW89_CORE=m' \
-          'CPTCFG_RTW89_PCI=m' \
-          'CPTCFG_RTW89_8852A=m' \
-          'CPTCFG_RTW89_8852B=m' \
-          'CPTCFG_RTW89_8852C=m' \
-          'CPTCFG_RTW89_8851BE=m' \
-          'CPTCFG_RTW89_8922AE=m' \
           'CPTCFG_WLAN_VENDOR_RALINK=y' \
           'CPTCFG_RT2X00=m' \
           'CPTCFG_RT2X00_LIB=m' \
@@ -817,173 +709,37 @@ runs:
           'CPTCFG_QRTR=m' \
           'CPTCFG_QRTR_MHI=m' \
           >> .config
-
+    
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
-
+    
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" \
           KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" \
           V=1 2>&1 | tee ../backports-build.log
-
+    
         KO_COUNT=$(find . -name '*.ko' | wc -l)
         echo "Backports built .ko count: $KO_COUNT"
         [ "$KO_COUNT" -gt 0 ] || exit 1
-
+    
         mkdir -p ../backports-artifacts
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
 
-    - name: Build External rtl88xxau
+    - name: Archive backports modules (flat)
       if: success()
       shell: bash
       run: |
         set -euo pipefail
-        RTL_DIR="$GITHUB_WORKSPACE/rtl88xxau"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
+        if [ ! -d "$GITHUB_WORKSPACE/backports-artifacts" ]; then
+          echo "Backports artifacts not found, skipping archive."
+          exit 0
         fi
-        export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-        export CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
-        rm -rf "$RTL_DIR"
-        git clone --depth=1 https://github.com/n0ss/realtek-rtl88xxau-dkms.git "$RTL_DIR"
-        cd "$RTL_DIR"
-        make KSRC="$KERNEL_BUILD" \
-          KCFLAGS="-Wno-error -Wno-implicit-fallthrough" \
-          modules -j$(nproc --all)
-        mkdir -p /tmp/rtl88xxau-ko
-        find . -name '*.ko' -exec cp {} /tmp/rtl88xxau-ko/ \;
-        echo "rtl88xxau built successfully"
-
-    - name: Build External mt7921 (5.10-compat standalone)
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        MT7921_DIR="$GITHUB_WORKSPACE/mt7921"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-        export CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
-        rm -rf "$MT7921_DIR"
-        git clone --depth=1 --branch 5.10-compat https://github.com/astsam/mt7921.git "$MT7921_DIR"
-        cd "$MT7921_DIR"
-        if [ -f "include/linux/module.h" ]; then
-          sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' include/linux/module.h
-          sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' include/linux/module.h
-        fi
-        make KSRC="$KERNEL_BUILD" KCFLAGS="-Wno-error=unknown-warning-option -Wno-implicit-fallthrough" modules -j$(nproc --all)
-        mkdir -p /tmp/mt7921-ko
-        find . -name '*.ko' -exec cp {} /tmp/mt7921-ko/ \;
-        echo "mt7921 built successfully"
-
-    - name: Create Magisk module with all Wi-Fi modules + firmware
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        MODDIR="$GITHUB_WORKSPACE/magisk-wifi"
-        rm -rf "$MODDIR"
-        mkdir -p "$MODDIR/system/vendor/lib/modules"
-
-        # Copy backports modules
-        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} "$MODDIR/system/vendor/lib/modules/" \;
-
-        # Copy rtl88xxau
-        if [ -d /tmp/rtl88xxau-ko ]; then
-          cp /tmp/rtl88xxau-ko/*.ko "$MODDIR/system/vendor/lib/modules/"
-        fi
-
-        # Copy mt7921 standalone
-        if [ -d /tmp/mt7921-ko ]; then
-          cp /tmp/mt7921-ko/*.ko "$MODDIR/system/vendor/lib/modules/"
-        fi
-
-        # Firmware for mt7921u
-        mkdir -p "$MODDIR/system/vendor/firmware/mediatek"
-        wget -q -O "$MODDIR/system/vendor/firmware/mediatek/WIFI_RAM_CODE_MT7961_1.bin" \
-          https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/WIFI_RAM_CODE_MT7961_1.bin || true
-        wget -q -O "$MODDIR/system/vendor/firmware/mediatek/WIFI_MT7961_patch_mcu_1_2_hdr.bin" \
-          https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/WIFI_MT7961_patch_mcu_1_2_hdr.bin || true
-
-        # module.prop
-        cat > "$MODDIR/module.prop" <<-EOF
-        id=wifi_backports
-        name=Wi-Fi Backports
-        version=1.0
-        versionCode=1
-        author=docdry
-        description=Backported Wi-Fi drivers (MT7921U, RTW88, Ralink, Atheros)
-        EOF
-
-        # service.sh
-        cat > "$MODDIR/service.sh" <<-'SERVICEEOF'
-        #!/system/bin/sh
-        MODDIR=${0%/*}
-        MODPATH="$MODDIR/system/vendor/lib/modules"
-
-        # Unload in-tree (safe, if loaded)
-        rmmod mt7921u 2>/dev/null
-        rmmod mt7921_common 2>/dev/null
-        rmmod mt76_usb 2>/dev/null
-        rmmod mt76_connac_lib 2>/dev/null
-        rmmod mt76 2>/dev/null
-        rmmod mac80211 2>/dev/null
-        rmmod cfg80211 2>/dev/null
-        sleep 1
-
-        # Load backports stack
-        insmod "$MODPATH/compat.ko" 2>/dev/null
-        insmod "$MODPATH/cfg80211.ko" 2>/dev/null
-        insmod "$MODPATH/mac80211.ko" 2>/dev/null
-        insmod "$MODPATH/mt76.ko" 2>/dev/null
-        insmod "$MODPATH/mt76-usb.ko" 2>/dev/null
-        insmod "$MODPATH/mt76-connac-lib.ko" 2>/dev/null
-        insmod "$MODPATH/mt7921-common.ko" 2>/dev/null
-        insmod "$MODPATH/mt7921u.ko" 2>/dev/null
-
-        # rtl88xxau
-        for ko in "$MODPATH"/rtw_*.ko; do
-          [ -f "$ko" ] && insmod "$ko" 2>/dev/null
-        done
-        SERVICEEOF
-        chmod +x "$MODDIR/service.sh"
-
-        # zip
-        cd "$MODDIR"
-        zip -r "$ARTIFACTS_FOLDER/wifi-backports-magisk.zip" .
-        echo "Magisk module created: $ARTIFACTS_FOLDER/wifi-backports-magisk.zip"
-
-    - name: Archive all external modules (flat)
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p /tmp/external-modules
-
-        # backports
-        if [ -d "$GITHUB_WORKSPACE/backports-artifacts" ]; then
-          find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/external-modules/ \;
-        fi
-
-        # rtl88xxau
-        if [ -d /tmp/rtl88xxau-ko ]; then
-          cp /tmp/rtl88xxau-ko/*.ko /tmp/external-modules/
-        fi
-
-        # mt7921
-        if [ -d /tmp/mt7921-ko ]; then
-          cp /tmp/mt7921-ko/*.ko /tmp/external-modules/
-        fi
-
-        cd /tmp/external-modules
-        zip -r "$ARTIFACTS_FOLDER/external-wifi-modules.zip" .
-        echo "Flat archive created: $ARTIFACTS_FOLDER/external-wifi-modules.zip"
-
+        mkdir -p /tmp/backports-flat
+        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
+        cd /tmp/backports-flat
+        zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
+        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
@@ -1012,9 +768,8 @@ runs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-${{ env.CONFIG }}
-        path: |
-          ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-          ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
-          ${{ env.ARTIFACTS_FOLDER }}/wifi-backports-magisk.zip
-          ${{ env.ARTIFACTS_FOLDER }}/external-wifi-modules.zip
+       name: kernel-${{ env.CONFIG }}
+       path: |
+        ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+        ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+        ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
