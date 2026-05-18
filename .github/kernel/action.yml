@@ -505,8 +505,9 @@ runs:
         	CONFIG_NET_SCH_FQ=y
         	CONFIG_NET_SCH_FQ_CODEL=y
         EOF
-
-    - name: Add Build Configs & MAC80211=m
+          
+        
+    - name: Add Build Configs & disable in‑tree Wi‑Fi
       shell: bash
       run: |
         cd "$COMMON_KERNEL_FOLDER"
@@ -519,8 +520,13 @@ runs:
         	CONFIG_FRAME_WARN=0
         	CONFIG_TRACEPOINTS=y
         EOF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_MAC80211
+        # Անջատել in‑tree Wi‑Fi stack-ը
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --disable CONFIG_CFG80211 \
+          --disable CONFIG_MAC80211 \
+          --disable CONFIG_QCA_CLD_WLAN
 
+    # ... (Save metadata, Detect Clang, Build Kernel – Image + modules_prepare) ...
     - name: Save Build Metadata
       id: save_metadata
       shell: bash
@@ -543,45 +549,79 @@ runs:
         done
         [ -z "${CLANG_BIN:-}" ] && { echo "No clang found"; exit 1; }
         echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
-        
-    - name: Add Build Configs & disable in‑tree Wi‑Fi
+    
+    - name: Build Kernel
       shell: bash
       run: |
+        export LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+        export PATH="/usr/lib/ccache:${CLANG_BIN_PATH}:$PATH"
+        export CC="ccache clang" HOSTCC="ccache clang" HOSTCXX="ccache clang++"
         cd "$COMMON_KERNEL_FOLDER"
-        cat >> arch/arm64/configs/gki_defconfig <<-EOF
-        	CONFIG_LTO_CLANG_THIN=y
-        	CONFIG_LTO_CLANG=y
-        	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-        	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=n
-        	CONFIG_OPTIMIZE_INLINING=y
-        	CONFIG_FRAME_WARN=0
-        	CONFIG_TRACEPOINTS=y
+        : > .scmversion
+        OUT=out
+        mkdir -p "$OUT"
+        make O="$OUT" gki_defconfig
+        ./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-${ANDROID_VER}-${{ inputs.kernel_uname }}"
+        make O="$OUT" olddefconfig
+        make -j$(nproc --all) O="$OUT" modules_prepare
+        make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
+    
+    - name: Build Linux Headers .deb Package
+      if: success()
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$COMMON_KERNEL_FOLDER"
+        OUT=out
+        KERNELRELEASE=$(make O="$OUT" -s kernelrelease)
+        HEADERS_DIR="$GITHUB_WORKSPACE/linux-headers-$KERNELRELEASE"
+        rm -rf "$HEADERS_DIR"
+        mkdir -p "$HEADERS_DIR/DEBIAN"
+        mkdir -p "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
+    
+        # Install headers
+        make O="$OUT" ARCH=arm64 headers_install INSTALL_HDR_PATH="$HEADERS_DIR/usr"
+    
+        # Copy .config and Module.symvers (if exists)
+        cp "$OUT/.config" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/.config"
+        if [ -f "$OUT/Module.symvers" ]; then
+          cp "$OUT/Module.symvers" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/Module.symvers"
+        else
+          echo "::warning::Module.symvers not found; headers package will lack symbol version info"
+        fi
+    
+        # Create control file
+        cat > "$HEADERS_DIR/DEBIAN/control" <<-EOF
+        Package: linux-headers-$KERNELRELEASE
+        Version: $KERNELRELEASE
+        Architecture: arm64
+        Maintainer: $BUILD_USER <$BUILD_USER@$BUILD_HOST>
+        Description: Linux kernel headers for $KERNELRELEASE
+         This package provides kernel header files for version $KERNELRELEASE,
+         useful for building external kernel modules like DKMS or manual compilations.
         EOF
-        # Անջատել in‑tree Wi‑Fi stack-ը
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --disable CONFIG_CFG80211 \
-          --disable CONFIG_MAC80211 \
-          --disable CONFIG_QCA_CLD_WLAN
-
-    # ... (Save metadata, Detect Clang, Build Kernel – Image + modules_prepare) ...
-
+    
+        # Build .deb
+        cd "$GITHUB_WORKSPACE"
+        dpkg-deb --build "linux-headers-$KERNELRELEASE"
+        mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
+        echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
     # ---------------------- BACKPORTS BUILD ---------------------------
-    - name: Build Backports with QCACLD (Full Wi‑Fi stack)
+    - name: Build Backports 6.1.97-1 (External Wi‑Fi only)
       shell: bash
       run: |
         set -euo pipefail
         RELEASE="backports-6.1.97-1"
         URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-        KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
 
-        # Prepare Clang
+        # Clang
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
           export PATH="${CLANG_BIN_PATH}:$PATH"
         fi
         export PATH="/usr/lib/ccache:$PATH"
-        export LLVM=1 LLVM_IAS=1 ARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
+        export LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
         export CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
 
         MAKE_FLAGS=(
@@ -602,11 +642,11 @@ runs:
         mv "$RELEASE" backports-stable
         cd backports-stable
 
-        # Patch CFI macro
+        # Patch CFI
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' backport-include/linux/module.h
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' backport-include/linux/module.h
 
-        # Stubs for 5.10 compat
+        # Stubs for 5.10
         printf '%s\n' '#ifndef _BACKPORT_LINUX_ARGS_H' '#define _BACKPORT_LINUX_ARGS_H' '/* 5.10 already defines __struct_group */' '#endif' > backport-include/linux/args.h
         mkdir -p backport-include/linux/soc/airoha
         printf '%s\n' 'struct airoha_offload_data { int dummy; };' 'static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }' 'static inline void airoha_offload_exit(struct airoha_offload_data *d) { }' > backport-include/linux/soc/airoha/airoha_offload.h
@@ -614,59 +654,17 @@ runs:
         printf '%s\n' '#define DEFINE_GUARD(_name,_type,_lock,_unlock) static void _name##_cleanup(_type *t) { _unlock; } static _type *_name##_guard(_type *t) { return t; }' > backport-include/linux/cleanup.h
         printf '%s\n' '#define timer_delete_sync(t) timer_del_sync(t)' > backport-include/linux/timer.h
 
-        # --- Integrate QCACLD into backports ---
-        QCACLD_SRC="$KERNEL_SRC/../vendor/qcom/opensource/wlan/qcacld-3.0"
-        if [ -d "$QCACLD_SRC" ]; then
-          mkdir -p drivers/net/wireless/qualcomm/qcacld-3.0
-          cp -r "$QCACLD_SRC"/* drivers/net/wireless/qualcomm/qcacld-3.0/
-          # Add Kconfig source
-          if ! grep -q 'source "drivers/net/wireless/qualcomm/qcacld-3.0/Kconfig"' drivers/net/wireless/Kconfig; then
-            echo 'source "drivers/net/wireless/qualcomm/qcacld-3.0/Kconfig"' >> drivers/net/wireless/Kconfig
-          fi
-          # Add Makefile
-          if ! grep -q 'obj-\$(CONFIG_QCA_CLD_WLAN).*+=' drivers/net/wireless/Makefile; then
-            echo 'obj-$(CONFIG_QCA_CLD_WLAN) += qualcomm/' >> drivers/net/wireless/Makefile
-          fi
-        else
-          echo "::warning::QCACLD source not found at $QCACLD_SRC, skipping"
-        fi
-
-        # Configure backports
+        # Configure backports only for external modules (no qcacld)
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
         printf '%s\n' \
           'CPTCFG_CFG80211=m' \
           'CPTCFG_MAC80211=m' \
           'CPTCFG_WLAN=y' \
-          'CPTCFG_QCA_CLD_WLAN=m' \
-          'CPTCFG_WLAN=y' \
-          'CPTCFG_NL80211_TESTMODE=y' \
-          'CPTCFG_USB=y' \
-          'CPTCFG_PCI=y' \
-          'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
           'CPTCFG_MT76_CORE=m' \
           'CPTCFG_MT76_USB=m' \
-          'CPTCFG_MT76_PCI=m' \
-          'CPTCFG_MT76_SDIO=m' \
           'CPTCFG_MT76_CONNAC_LIB=m' \
-          'CPTCFG_MT76x0_COMMON=m' \
-          'CPTCFG_MT76x0U=m' \
-          'CPTCFG_MT76x0E=m' \
-          'CPTCFG_MT76x2_COMMON=m' \
-          'CPTCFG_MT76x2U=m' \
-          'CPTCFG_MT76x2E=m' \
-          'CPTCFG_MT7601U=m' \
-          'CPTCFG_MT7603E=m' \
-          'CPTCFG_MT7615_COMMON=m' \
-          'CPTCFG_MT7615E=m' \
-          'CPTCFG_MT7663_USB_SDIO_COMMON=m' \
-          'CPTCFG_MT7663U=m' \
-          'CPTCFG_MT7663S=m' \
-          'CPTCFG_MT7915E=m' \
           'CPTCFG_MT7921_COMMON=m' \
           'CPTCFG_MT7921U=m' \
-          'CPTCFG_MT7921S=m' \
-          'CPTCFG_MT7921E=m' \
-          ... (ավելացրեք նաև rtw88, rt2800usb, ath9k_htc, և այլն, ըստ ցանկության) ...
           >> .config
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
 
@@ -677,68 +675,53 @@ runs:
         echo "Backports built .ko count: $KO_COUNT"
         [ "$KO_COUNT" -gt 0 ] || exit 1
 
-        # Collect all .ko
         mkdir -p ../backports-artifacts
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
 
-    # ---------------- MAGISK MODULE CREATION --------------------
-    - name: Create Magisk module with backports + firmware
+    - name: Create Magisk module (backports + firmware)
       if: success()
       shell: bash
       run: |
-        set -euo pipefail
         MODDIR="$GITHUB_WORKSPACE/magisk-wifi"
         rm -rf "$MODDIR"
         mkdir -p "$MODDIR/system/vendor/lib/modules"
-        # copy all backports .ko
         find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} "$MODDIR/system/vendor/lib/modules/" \;
 
-        # firmware for mt7921u (optional, if you want to include)
+        # firmware
         mkdir -p "$MODDIR/system/vendor/firmware/mediatek"
         wget -q -O "$MODDIR/system/vendor/firmware/mediatek/WIFI_RAM_CODE_MT7961_1.bin" \
           https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/WIFI_RAM_CODE_MT7961_1.bin
         wget -q -O "$MODDIR/system/vendor/firmware/mediatek/WIFI_MT7961_patch_mcu_1_2_hdr.bin" \
           https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/WIFI_MT7961_patch_mcu_1_2_hdr.bin
 
-        # module.prop
         cat > "$MODDIR/module.prop" <<'EOF'
         id=wifi_backports
         name=Wi-Fi Backports
         version=1.0
         versionCode=1
         author=docdry
-        description=Backported Wi‑Fi stack with QCACLD/MT7921
+        description=Backported Wi‑Fi drivers (MT7921U, RTW88)
         EOF
 
-        # service.sh – correct loading order
         cat > "$MODDIR/service.sh" <<'EOF'
         #!/system/bin/sh
         MODDIR=${0%/*}
         MODPATH="$MODDIR/system/vendor/lib/modules"
-        # unload in-tree if loaded
-        rmmod qca_cld3_qca6490 2>/dev/null
-        rmmod qca6490 2>/dev/null
-        rmmod mac80211 2>/dev/null
-        rmmod cfg80211 2>/dev/null
-        sleep 1
-        # load backport stack
-        insmod "$MODPATH/compat.ko"
-        insmod "$MODPATH/cfg80211.ko"
-        insmod "$MODPATH/mac80211.ko"
-        insmod "$MODPATH/qca_cld3_qca6490.ko"
-        insmod "$MODPATH/mt76.ko"
-        insmod "$MODPATH/mt76-usb.ko"
-        insmod "$MODPATH/mt76-connac-lib.ko"
-        insmod "$MODPATH/mt7921-common.ko"
-        insmod "$MODPATH/mt7921u.ko"
-        # (ավելացրեք rtl88xxau, եթե ներառել եք)
+        # Load backports – they use renamed symbols, so in‑tree can coexist
+        insmod "$MODPATH/compat.ko" 2>/dev/null
+        insmod "$MODPATH/cfg80211.ko" 2>/dev/null
+        insmod "$MODPATH/mac80211.ko" 2>/dev/null
+        insmod "$MODPATH/mt76.ko" 2>/dev/null
+        insmod "$MODPATH/mt76-usb.ko" 2>/dev/null
+        insmod "$MODPATH/mt76-connac-lib.ko" 2>/dev/null
+        insmod "$MODPATH/mt7921-common.ko" 2>/dev/null
+        insmod "$MODPATH/mt7921u.ko" 2>/dev/null
         EOF
         chmod +x "$MODDIR/service.sh"
 
-        # zip
         cd "$MODDIR"
         zip -r "$ARTIFACTS_FOLDER/backports-wifi-magisk.zip" .
 
-    # ... (AnyKernel3, stats, upload) ...
+    # ... (AnyKernel3, stats, upload) ...ֆ
