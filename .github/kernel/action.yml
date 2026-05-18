@@ -651,102 +651,63 @@ runs:
           'CPTCFG_MT7925U=m' \
           'CPTCFG_MT7925E=m' \
           'CPTCFG_MT7996E=m' \
-          'CPTCFG_WLAN_VENDOR_REALTEK=y' \
-          # 'CPTCFG_RTLWIFI=m' \
-          # 'CPTCFG_RTLWIFI_DEBUG=y' \
-          # 'CPTCFG_RTL8192CE=m' \
-          # 'CPTCFG_RTL8192SE=m' \
-          # 'CPTCFG_RTL8192DE=m' \
-          # 'CPTCFG_RTL8723AE=m' \
-          # 'CPTCFG_RTL8723BE=m' \
-          # 'CPTCFG_RTL8188EE=m' \
-          # 'CPTCFG_RTL8192CU=m' \
-          # 'CPTCFG_RTL8192CC_COMMON=m' \
-          # 'CPTCFG_RTL8192EE=m' \
-          # 'CPTCFG_RTL8821AE=m' \
-          # 'CPTCFG_RTL8XXXU=m' \
-          # 'CPTCFG_RTL8XXXU_UNTESTED=y' \
-          # 'CPTCFG_RTL8180=m' \
-          # 'CPTCFG_RTL8187=m' \
-          # 'CPTCFG_RTW88=m' \
-          # 'CPTCFG_RTW88_CORE=m' \
-          # 'CPTCFG_RTW88_PCI=m' \
-          # 'CPTCFG_RTW88_USB=m' \
-          # 'CPTCFG_RTW88_8822B=m' \
-          # 'CPTCFG_RTW88_8822BU=m' \
-          # 'CPTCFG_RTW88_8822C=m' \
-          # 'CPTCFG_RTW88_8822CU=m' \
-          # 'CPTCFG_RTW88_8723D=m' \
-          # 'CPTCFG_RTW88_8723DU=m' \
-          # 'CPTCFG_RTW88_8821C=m' \
-          # 'CPTCFG_RTW88_8821CU=m' \
-          # 'CPTCFG_RTW88_8723X=m' \
-          # 'CPTCFG_RTW88_8723XU=m' \
-          # 'CPTCFG_RTW89=m' \
-          # 'CPTCFG_RTW89_CORE=m' \
-          # 'CPTCFG_RTW89_PCI=m' \
-          # 'CPTCFG_RTW89_8852A=m' \
-          # 'CPTCFG_RTW89_8852B=m' \
-          # 'CPTCFG_RTW89_8852C=m' \
-          # 'CPTCFG_RTW89_8851BE=m' \
-          # 'CPTCFG_RTW89_8922AE=m' \
-          # 'CPTCFG_WLAN_VENDOR_RALINK=y' \
-          # 'CPTCFG_RT2X00=m' \
-          # 'CPTCFG_RT2X00_LIB=m' \
-          # 'CPTCFG_RT2X00_LIB_FIRMWARE=y' \
-          # 'CPTCFG_RT2X00_USB=m' \
-          # 'CPTCFG_RT2X00_PCI=m' \
-          # 'CPTCFG_RT2800LIB=m' \
-          # 'CPTCFG_RT2800USB=m' \
-          # 'CPTCFG_RT2800USB_RT33XX=y' \
-          # 'CPTCFG_RT2800USB_RT35XX=y' \
-          # 'CPTCFG_RT2800USB_RT3573=y' \
-          # 'CPTCFG_RT2800USB_RT53XX=y' \
-          # 'CPTCFG_RT2800USB_RT55XX=y' \
-          # 'CPTCFG_RT2800USB_UNKNOWN=y' \
-          # 'CPTCFG_RT2500USB=m' \
-          # 'CPTCFG_RT73USB=m' \
-          # 'CPTCFG_RT2400PCI=m' \
-          # 'CPTCFG_RT2500PCI=m' \
-          # 'CPTCFG_RT2800PCI=m' \
-          # 'CPTCFG_RT2800PCI_RT33XX=y' \
-          # 'CPTCFG_RT2800PCI_RT35XX=y' \
-          # 'CPTCFG_RT2800PCI_RT53XX=y' \
-          # 'CPTCFG_RT2800PCI_RT3290=y' \
-          # 'CPTCFG_WLAN_VENDOR_ATH=y' \
-          # 'CPTCFG_ATH_COMMON=m' \
-          # 'CPTCFG_ATH_CARDS=m' \
-          # 'CPTCFG_ATH5K=m' \
-          # 'CPTCFG_ATH9K=m' \
-          # 'CPTCFG_ATH9K_HW=m' \
-          # 'CPTCFG_ATH9K_COMMON=m' \
-          # 'CPTCFG_ATH9K_COMMON_DEBUG=y' \
-          # 'CPTCFG_ATH9K_DEBUGFS=y' \
-          # 'CPTCFG_ATH9K_HTC=m' \
-          # 'CPTCFG_ATH9K_HTC_DEBUGFS=y' \
-          # 'CPTCFG_ATH6KL=m' \
-          # 'CPTCFG_ATH6KL_USB=m' \
-          # 'CPTCFG_ATH6KL_SDIO=m' \
-          # 'CPTCFG_CARL9170=m' \
-          # 'CPTCFG_AR5523=m' \
-          # 'CPTCFG_WIL6210=m' \
-          # 'CPTCFG_ATH10K=m' \
-          # 'CPTCFG_ATH10K_PCI=m' \
-          # 'CPTCFG_ATH10K_SDIO=m' \
-          # 'CPTCFG_ATH10K_USB=m' \
-          # 'CPTCFG_ATH10K_DEBUG=y' \
-          # 'CPTCFG_ATH10K_DEBUGFS=y' \
-          # 'CPTCFG_ATH11K=m' \
-          # 'CPTCFG_ATH11K_PCI=m' \
-          # 'CPTCFG_ATH11K_DEBUG=y' \
-          # 'CPTCFG_ATH11K_DEBUGFS=y' \
-          # 'CPTCFG_WCN36XX=m' \
-          # 'CPTCFG_WCN36XX_DEBUGFS=y' \
-          # 'CPTCFG_WLAN_VENDOR_ZYDAS=y' \
-          # 'CPTCFG_ZD1211RW=m' \
-          # 'CPTCFG_MHI_BUS=m' \
-          # 'CPTCFG_QRTR=m' \
-          # 'CPTCFG_QRTR_MHI=m' \
+          'CPTCFG_WLAN_VENDOR_RALINK=y' \
+          'CPTCFG_RT2X00=m' \
+          'CPTCFG_RT2X00_LIB=m' \
+          'CPTCFG_RT2X00_LIB_FIRMWARE=y' \
+          'CPTCFG_RT2X00_USB=m' \
+          'CPTCFG_RT2X00_PCI=m' \
+          'CPTCFG_RT2800LIB=m' \
+          'CPTCFG_RT2800USB=m' \
+          'CPTCFG_RT2800USB_RT33XX=y' \
+          'CPTCFG_RT2800USB_RT35XX=y' \
+          'CPTCFG_RT2800USB_RT3573=y' \
+          'CPTCFG_RT2800USB_RT53XX=y' \
+          'CPTCFG_RT2800USB_RT55XX=y' \
+          'CPTCFG_RT2800USB_UNKNOWN=y' \
+          'CPTCFG_RT2500USB=m' \
+          'CPTCFG_RT73USB=m' \
+          'CPTCFG_RT2400PCI=m' \
+          'CPTCFG_RT2500PCI=m' \
+          'CPTCFG_RT2800PCI=m' \
+          'CPTCFG_RT2800PCI_RT33XX=y' \
+          'CPTCFG_RT2800PCI_RT35XX=y' \
+          'CPTCFG_RT2800PCI_RT53XX=y' \
+          'CPTCFG_RT2800PCI_RT3290=y' \
+          'CPTCFG_WLAN_VENDOR_ATH=y' \
+          'CPTCFG_ATH_COMMON=m' \
+          'CPTCFG_ATH_CARDS=m' \
+          'CPTCFG_ATH5K=m' \
+          'CPTCFG_ATH9K=m' \
+          'CPTCFG_ATH9K_HW=m' \
+          'CPTCFG_ATH9K_COMMON=m' \
+          'CPTCFG_ATH9K_COMMON_DEBUG=y' \
+          'CPTCFG_ATH9K_DEBUGFS=y' \
+          'CPTCFG_ATH9K_HTC=m' \
+          'CPTCFG_ATH9K_HTC_DEBUGFS=y' \
+          'CPTCFG_ATH6KL=m' \
+          'CPTCFG_ATH6KL_USB=m' \
+          'CPTCFG_ATH6KL_SDIO=m' \
+          'CPTCFG_CARL9170=m' \
+          'CPTCFG_AR5523=m' \
+          'CPTCFG_WIL6210=m' \
+          'CPTCFG_ATH10K=m' \
+          'CPTCFG_ATH10K_PCI=m' \
+          'CPTCFG_ATH10K_SDIO=m' \
+          'CPTCFG_ATH10K_USB=m' \
+          'CPTCFG_ATH10K_DEBUG=y' \
+          'CPTCFG_ATH10K_DEBUGFS=y' \
+          'CPTCFG_ATH11K=m' \
+          'CPTCFG_ATH11K_PCI=m' \
+          'CPTCFG_ATH11K_DEBUG=y' \
+          'CPTCFG_ATH11K_DEBUGFS=y' \
+          'CPTCFG_WCN36XX=m' \
+          'CPTCFG_WCN36XX_DEBUGFS=y' \
+          'CPTCFG_WLAN_VENDOR_ZYDAS=y' \
+          'CPTCFG_ZD1211RW=m' \
+          'CPTCFG_MHI_BUS=m' \
+          'CPTCFG_QRTR=m' \
+          'CPTCFG_QRTR_MHI=m' \
           >> .config
     
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
@@ -763,7 +724,7 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
-        
+
     - name: Archive backports modules (flat)
       if: success()
       shell: bash
@@ -778,6 +739,7 @@ runs:
         cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
         echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
@@ -803,10 +765,11 @@ runs:
         echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
 
     - name: Upload Artifacts
+      if: always()
       uses: actions/upload-artifact@v4
       with:
        name: kernel-${{ env.CONFIG }}
        path: |
-            ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-            ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
-            ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
+        ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+        ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+        ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
