@@ -408,7 +408,7 @@ runs:
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT7601U \
+          --enable CONFIG_MT7601U \
           --enable CONFIG_MT76_CORE \
           --enable CONFIG_MT76_PCI \
           --enable CONFIG_MT76_USB \
@@ -422,7 +422,7 @@ runs:
           --enable CONFIG_MT7915E \
           --enable CONFIG_MT7921_COMMON \
           --enable CONFIG_MT7921E \
-          --module CONFIG_MT7921U
+          --enable CONFIG_MT7921U
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
