@@ -474,20 +474,20 @@ runs:
         	CONFIG_NET_SCH_FQ_CODEL=y
         EOF
 
-    # - name: Add Build Configs & MAC80211=m
-    #   shell: bash
-    #   run: |
-    #     cd "$COMMON_KERNEL_FOLDER"
-    #     cat >> arch/arm64/configs/gki_defconfig <<-EOF
-    #     	CONFIG_LTO_CLANG_THIN=y
-    #     	CONFIG_LTO_CLANG=y
-    #     	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-    #     	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=n
-    #     	CONFIG_OPTIMIZE_INLINING=y
-    #     	CONFIG_FRAME_WARN=0
-    #     	CONFIG_TRACEPOINTS=y
-    #     EOF
-    #     ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211
+    - name: Add Build Configs & MAC80211=m
+      shell: bash
+      run: |
+        cd "$COMMON_KERNEL_FOLDER"
+        cat >> arch/arm64/configs/gki_defconfig <<-EOF
+        	CONFIG_LTO_CLANG_THIN=y
+        	CONFIG_LTO_CLANG=y
+        	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+        	CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=n
+        	CONFIG_OPTIMIZE_INLINING=y
+        	CONFIG_FRAME_WARN=0
+        	CONFIG_TRACEPOINTS=y
+        EOF
+        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_MAC80211
 
     - name: Save Build Metadata
       id: save_metadata
