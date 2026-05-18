@@ -431,7 +431,39 @@ runs:
           
         echo "Nethunter configs applied ✅"
         echo "::endgroup::"
+        
+    - name: Add Other configs
+      if: env.KERNEL_VER == '5.10'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Adding other configs..."
+        cd "$COMMON_KERNEL_FOLDER"
 
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_LRU_GEN_ENABLED
+
+        # Add for Droidspaces support
+        # TODO: This patch is not universal add conditions for other kernel versions!
+        #       for now Droidspaces support for kernels other than 5.10 is restricted
+        if patch -R -p1 -s -f --dry-run < "$WILD_KERNEL_PATCHES/common/droidspaces/fix_sysvipc_kabi_1_2_3.patch" >/dev/null 2>&1 || \
+           patch -R -p1 -s -f --dry-run < "$WILD_KERNEL_PATCHES/common/droidspaces/fix_sysvipc_kabi_3_4_5.patch" >/dev/null 2>&1 || \
+           patch -R -p1 -s -f --dry-run < "$WILD_KERNEL_PATCHES/common/droidspaces/fix_sysvipc_kabi_6_7_8.patch">/dev/null 2>&1; then
+          echo "Patch already applied. Skipping."
+        else
+          echo "Applying patch..."
+          patch -p1 < "$WILD_KERNEL_PATCHES/common/droidspaces/fix_sysvipc_kabi_1_2_3.patch"
+        fi
+
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_SYSVIPC \
+          --enable CONFIG_DEVTMPFS \
+          --enable CONFIG_PID_NS \
+          --enable CONFIG_POSIX_MQUEUE
+
+        echo "Other configs added ✅"
+        echo "::endgroup::"
+        
     - name: Add TTL Support
       shell: bash
       run: |
