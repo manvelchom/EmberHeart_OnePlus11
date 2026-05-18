@@ -569,7 +569,72 @@ runs:
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
+        
+      - name: Configure backports for MT76/MT7921 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-stable"
 
+          # 1. Փոխում ենք հիմնական ենթահամակարգերի անունները Makefile-ներում
+          find . -name "Makefile" -type f -exec sed -i 's/cfg80211-/bp_cfg80211-/g' {} +
+          find . -name "Makefile" -type f -exec sed -i 's/mac80211-/bp_mac80211-/g' {} +
+          sed -i 's/obj-$(CPTCFG_CFG80211) += cfg80211.o/obj-$(CPTCFG_CFG80211) += bp_cfg80211.o/' net/wireless/Makefile
+          sed -i 's/obj-$(CPTCFG_MAC80211) += mac80211.o/obj-$(CPTCFG_MAC80211) += bp_mac80211.o/' net/mac80211/Makefile
+
+          # 2. Ճշտում ենք MT76-ի ներքին կախվածությունները, որպեսզի այն կապվի մեր bp_mac80211-ի հետ
+          if [ -d "drivers/net/wireless/mediatek/mt76" ]; then
+            find drivers/net/wireless/mediatek/mt76/ -name "Makefile" -type f -exec sed -i 's/mac80211/bp_mac80211/g' {} +
+            find drivers/net/wireless/mediatek/mt76/ -name "Kconfig" -type f -exec sed -i 's/MAC80211/BP_MAC80211/g' {} +
+          fi
+
+          # 3. Սահմանում ենք միջուկի (Kernel) ուղղությունները և դրոշակները
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
+
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC="ccache clang"
+          )
+
+          # 4. Ստեղծում ենք նախնական դատարկ կոնֆիգուրացիան
+          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
+
+          # 5. Ավելացնում ենք միայն անհրաժեշտ MediaTek և Wi-Fi մոդուլները
+          printf '%s\n' \
+            'CPTCFG_WLAN=y' \
+            'CPTCFG_CFG80211=m' \
+            'CPTCFG_MAC80211=m' \
+            'CPTCFG_MAC80211_LEDS=y' \
+            'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
+            'CPTCFG_MT76_CORE=m' \
+            'CPTCFG_MT76_LEDS=y' \
+            'CPTCFG_MT76_USB=m' \
+            'CPTCFG_MT7921_COMMON=m' \
+            'CPTCFG_MT7921U=m' >> .config
+
+          # 6. Թարմացնում ենք .config ֆայլը ըստ նոր պարամետրերի
+          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig </dev/null
+          
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
       run: |
