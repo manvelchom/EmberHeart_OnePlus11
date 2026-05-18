@@ -31,7 +31,7 @@ on:
         description: 'Enter KernelSU Next Branch or commit hash (blank for stable tag)'
         required: true
         type: string
-        default: 551ad80473f60e052917aec08abf5323b6ab2f7c
+        default: 
       optimize_level:
         description: "Compiler optimization level"
         required: true
@@ -45,7 +45,7 @@ on:
       susfs_branch_or_commit:
         description: 'Enter SusFS Branch or commit hash'
         type: string
-        default: '674f72b6f683e837d7f557704cabe00a83eeb0b4'
+        default: ''
       model:
         description: 'Select device to be built'
         required: true
