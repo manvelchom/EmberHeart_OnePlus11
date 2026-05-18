@@ -123,9 +123,9 @@ runs:
         if [[ "$OP_MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --location --proto '=https' "$OP_MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/OnePlusOOS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/OnePlusOOS/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         success=false
         for i in 1 2 3; do
@@ -410,7 +410,7 @@ runs:
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --enable CONFIG_MT7601U \
           --enable CONFIG_MT76_CORE \
-          --enable CONFIG_MT76_PCI \
+          --enable CONFIG_MT76_CORE \
           --enable CONFIG_MT76_USB \
           --enable CONFIG_MT76x02_LIB \
           --enable CONFIG_MT76x02_USB \
@@ -421,8 +421,7 @@ runs:
           --enable CONFIG_MT7615_COMMON \
           --enable CONFIG_MT7915E \
           --enable CONFIG_MT7921_COMMON \
-          --enable CONFIG_MT7921E \
-          --enable CONFIG_MT7921U
+          --enable CONFIG_MT7921U \
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -487,7 +486,7 @@ runs:
         	CONFIG_FRAME_WARN=0
         	CONFIG_TRACEPOINTS=y
         EOF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_MAC80211
+        ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211
 
     - name: Save Build Metadata
       id: save_metadata
@@ -569,72 +568,7 @@ runs:
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
-        
-    - name: Configure backports for MT76/MT7921 only
-      shell: bash
-      run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE/backports-stable"
 
-          # 1. Փոխում ենք հիմնական ենթահամակարգերի անունները Makefile-ներում
-          find . -name "Makefile" -type f -exec sed -i 's/cfg80211-/bp_cfg80211-/g' {} +
-          find . -name "Makefile" -type f -exec sed -i 's/mac80211-/bp_mac80211-/g' {} +
-          sed -i 's/obj-$(CPTCFG_CFG80211) += cfg80211.o/obj-$(CPTCFG_CFG80211) += bp_cfg80211.o/' net/wireless/Makefile
-          sed -i 's/obj-$(CPTCFG_MAC80211) += mac80211.o/obj-$(CPTCFG_MAC80211) += bp_mac80211.o/' net/mac80211/Makefile
-
-          # 2. Ճշտում ենք MT76-ի ներքին կախվածությունները, որպեսզի այն կապվի մեր bp_mac80211-ի հետ
-          if [ -d "drivers/net/wireless/mediatek/mt76" ]; then
-            find drivers/net/wireless/mediatek/mt76/ -name "Makefile" -type f -exec sed -i 's/mac80211/bp_mac80211/g' {} +
-            find drivers/net/wireless/mediatek/mt76/ -name "Kconfig" -type f -exec sed -i 's/MAC80211/BP_MAC80211/g' {} +
-          fi
-
-          # 3. Սահմանում ենք միջուկի (Kernel) ուղղությունները և դրոշակները
-          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-
-          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
-            export PATH="${CLANG_BIN}:$PATH"
-          fi
-          export PATH="/usr/lib/ccache:$PATH"
-
-          MAKE_FLAGS=(
-            LLVM=1
-            LLVM_IAS=1
-            ARCH=arm64
-            SUBARCH=arm64
-            CLANG_TRIPLE=aarch64-linux-gnu-
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-            LD=ld.lld
-            HOSTLD=ld.lld
-            AR=llvm-ar
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            STRIP=llvm-strip
-            HOSTCC=clang
-            HOSTCXX=clang++
-            CC="ccache clang"
-          )
-
-          # 4. Ստեղծում ենք նախնական դատարկ կոնֆիգուրացիան
-          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
-
-          # 5. Ավելացնում ենք միայն անհրաժեշտ MediaTek և Wi-Fi մոդուլները
-          printf '%s\n' \
-            'CPTCFG_WLAN=y' \
-            'CPTCFG_CFG80211=m' \
-            'CPTCFG_MAC80211=m' \
-            'CPTCFG_MAC80211_LEDS=y' \
-            'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
-            'CPTCFG_MT76_CORE=m' \
-            'CPTCFG_MT76_LEDS=y' \
-            'CPTCFG_MT76_USB=m' \
-            'CPTCFG_MT7921_COMMON=m' \
-            'CPTCFG_MT7921U=m' >> .config
-
-          # 6. Թարմացնում ենք .config ֆայլը ըստ նոր պարամետրերի
-          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig </dev/null
-          
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
       run: |
@@ -716,6 +650,45 @@ runs:
           'CPTCFG_MT7925U=m' \
           'CPTCFG_MT7925E=m' \
           'CPTCFG_MT7996E=m' \
+          'CPTCFG_WLAN_VENDOR_REALTEK=y' \
+          'CPTCFG_RTLWIFI=m' \
+          'CPTCFG_RTLWIFI_DEBUG=y' \
+          'CPTCFG_RTL8192CE=m' \
+          'CPTCFG_RTL8192SE=m' \
+          'CPTCFG_RTL8192DE=m' \
+          'CPTCFG_RTL8723AE=m' \
+          'CPTCFG_RTL8723BE=m' \
+          'CPTCFG_RTL8188EE=m' \
+          'CPTCFG_RTL8192CU=m' \
+          'CPTCFG_RTL8192CC_COMMON=m' \
+          'CPTCFG_RTL8192EE=m' \
+          'CPTCFG_RTL8821AE=m' \
+          'CPTCFG_RTL8XXXU=m' \
+          'CPTCFG_RTL8XXXU_UNTESTED=y' \
+          'CPTCFG_RTL8180=m' \
+          'CPTCFG_RTL8187=m' \
+          'CPTCFG_RTW88=m' \
+          'CPTCFG_RTW88_CORE=m' \
+          'CPTCFG_RTW88_PCI=m' \
+          'CPTCFG_RTW88_USB=m' \
+          'CPTCFG_RTW88_8822B=m' \
+          'CPTCFG_RTW88_8822BU=m' \
+          'CPTCFG_RTW88_8822C=m' \
+          'CPTCFG_RTW88_8822CU=m' \
+          'CPTCFG_RTW88_8723D=m' \
+          'CPTCFG_RTW88_8723DU=m' \
+          'CPTCFG_RTW88_8821C=m' \
+          'CPTCFG_RTW88_8821CU=m' \
+          'CPTCFG_RTW88_8723X=m' \
+          'CPTCFG_RTW88_8723XU=m' \
+          'CPTCFG_RTW89=m' \
+          'CPTCFG_RTW89_CORE=m' \
+          'CPTCFG_RTW89_PCI=m' \
+          'CPTCFG_RTW89_8852A=m' \
+          'CPTCFG_RTW89_8852B=m' \
+          'CPTCFG_RTW89_8852C=m' \
+          'CPTCFG_RTW89_8851BE=m' \
+          'CPTCFG_RTW89_8922AE=m' \
           'CPTCFG_WLAN_VENDOR_RALINK=y' \
           'CPTCFG_RT2X00=m' \
           'CPTCFG_RT2X00_LIB=m' \
@@ -789,7 +762,7 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
-
+        
     - name: Archive backports modules (flat)
       if: success()
       shell: bash
@@ -804,7 +777,6 @@ runs:
         cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
         echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
-        
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
@@ -830,11 +802,10 @@ runs:
         echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
 
     - name: Upload Artifacts
-      if: always()
       uses: actions/upload-artifact@v4
       with:
        name: kernel-${{ env.CONFIG }}
        path: |
-        ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-        ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
-        ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
+            ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+            ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+            ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
