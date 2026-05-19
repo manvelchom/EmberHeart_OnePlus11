@@ -1,4 +1,4 @@
-name: Build RTL88xx Modules for OnePlus11R
+name: Build RTL88xx Wi-Fi Modules
 
 on:
   workflow_dispatch:
@@ -10,20 +10,13 @@ jobs:
       ARCH: arm64
       MODULES: rtl88xxau rtl88xbu
       KERNEL_PATH: kernel_platform/msm-kernel
-      CLANG_PATH: kernel_platform/prebuilts-master/clang/host/linux-x86/bin/clang
+      CLANG_PATH: kernel_platform/prebuilts-master/clang/host/linux-x86/bin
 
     steps:
-      - name: Checkout Kernel and Manifest Projects
+      - name: Checkout full repo
         uses: actions/checkout@v3
         with:
-          repository: OnePlusOSS/android_kernel_oneplus_sm8475
-          path: kernel_platform/msm-kernel
-
-      - name: Checkout Prebuilts
-        uses: actions/checkout@v3
-        with:
-          repository: codelinaro/remote (example placeholder)
-          path: kernel_platform/prebuilts-master
+          submodules: true
 
       - name: Install dependencies
         run: |
@@ -40,7 +33,7 @@ jobs:
           mkdir -p build_output
           export PATH="$PWD/$CLANG_PATH:$PATH"
           for mod in $MODULES; do
-            echo "Building $mod module"
+            echo "Building $mod..."
             cd $mod
             make -C ../$KERNEL_PATH M=$PWD ARCH=$ARCH CC=clang
             cp *.ko ../build_output/
@@ -50,7 +43,7 @@ jobs:
       - name: List built modules
         run: ls -l build_output/
 
-      - name: Upload built modules
+      - name: Upload modules as artifact
         uses: actions/upload-artifact@v3
         with:
           name: wifi-modules
