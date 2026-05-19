@@ -428,7 +428,7 @@ runs:
         	CONFIG_MT76_USB=y
         	CONFIG_MT76_CONNAC_LIB=y
           CONFIG_MT7921_COMMON=y
-          CONFIG_MT7921U=y
+          CONFIG_MT7921U=m
         EOF
 
     - name: Add Other configs
