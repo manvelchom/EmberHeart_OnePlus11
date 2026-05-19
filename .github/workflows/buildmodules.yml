@@ -8,17 +8,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ARCH: arm64
-      MODULES: rtl88xxau rtl88xbu
-      KERNEL_PATH: kernel_platform/msm-kernel
+      MODULES: rtl88xxau
+      KERNEL_SRC: kernel_platform/msm-kernel
       CLANG_PATH: kernel_platform/prebuilts-master/clang/host/linux-x86/bin
+      LLVM: 1
 
     steps:
-      - name: Checkout full repo
+      - name: Checkout full repo (with submodules)
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison flex libelf-dev libncurses5-dev git dkms build-essential
@@ -26,24 +27,33 @@ jobs:
       - name: Clone RTL88xx modules
         run: |
           git clone https://github.com/aircrack-ng/rtl8812au.git rtl88xxau
-          git clone https://github.com/ulli-kroll/rtl88xbu.git rtl88xbu
 
-      - name: Build modules
+      - name: Prepare kernel source (generate .config + modules_prepare)
         run: |
+          export PATH="$GITHUB_WORKSPACE/$CLANG_PATH:$PATH"
+          cd $KERNEL_SRC
+          make ARCH=$ARCH LLVM=$LLVM gki_defconfig
+          make ARCH=$ARCH LLVM=$LLVM modules_prepare
+
+      - name: Build external modules
+        run: |
+          export PATH="$GITHUB_WORKSPACE/$CLANG_PATH:$PATH"
           mkdir -p build_output
-          export PATH="$PWD/$CLANG_PATH:$PATH"
+
           for mod in $MODULES; do
             echo "Building $mod..."
-            cd $mod
-            make -C ../$KERNEL_PATH M=$PWD ARCH=$ARCH CC=clang
-            cp *.ko ../build_output/
-            cd ..
+            make -C $GITHUB_WORKSPACE/$KERNEL_SRC \
+                 ARCH=$ARCH \
+                 LLVM=$LLVM \
+                 M=$GITHUB_WORKSPACE/$mod \
+                 modules
+            find $mod -name "*.ko" -exec cp {} build_output/ \;
           done
 
       - name: List built modules
         run: ls -l build_output/
 
-      - name: Upload modules as artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: wifi-modules
