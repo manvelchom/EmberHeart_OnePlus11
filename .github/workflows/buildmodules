@@ -1,0 +1,57 @@
+name: Build RTL88xx Modules for OnePlus11R
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-modules:
+    runs-on: ubuntu-latest
+    env:
+      ARCH: arm64
+      MODULES: rtl88xxau rtl88xbu
+      KERNEL_PATH: kernel_platform/msm-kernel
+      CLANG_PATH: kernel_platform/prebuilts-master/clang/host/linux-x86/bin/clang
+
+    steps:
+      - name: Checkout Kernel and Manifest Projects
+        uses: actions/checkout@v3
+        with:
+          repository: OnePlusOSS/android_kernel_oneplus_sm8475
+          path: kernel_platform/msm-kernel
+
+      - name: Checkout Prebuilts
+        uses: actions/checkout@v3
+        with:
+          repository: codelinaro/remote (example placeholder)
+          path: kernel_platform/prebuilts-master
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libelf-dev libncurses5-dev git dkms build-essential
+
+      - name: Clone RTL88xx modules
+        run: |
+          git clone https://github.com/aircrack-ng/rtl8812au.git rtl88xxau
+          git clone https://github.com/ulli-kroll/rtl88xbu.git rtl88xbu
+
+      - name: Build modules
+        run: |
+          mkdir -p build_output
+          export PATH="$PWD/$CLANG_PATH:$PATH"
+          for mod in $MODULES; do
+            echo "Building $mod module"
+            cd $mod
+            make -C ../$KERNEL_PATH M=$PWD ARCH=$ARCH CC=clang
+            cp *.ko ../build_output/
+            cd ..
+          done
+
+      - name: List built modules
+        run: ls -l build_output/
+
+      - name: Upload built modules
+        uses: actions/upload-artifact@v3
+        with:
+          name: wifi-modules
+          path: build_output/
