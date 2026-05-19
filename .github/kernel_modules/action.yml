@@ -593,7 +593,7 @@ runs:
         echo "Removing unnecessary modules..."
         cd modules
         # Download default module list
-        curl -L -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
+        curl -L -o default_modules.txt https://raw.githubusercontent.com/docdry0001/kernel_patchel/refs/heads/main/default_modules.txt
         # Remove modules in the default list
 
         while IFS= read -r module; do
