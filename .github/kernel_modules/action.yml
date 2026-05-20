@@ -300,8 +300,11 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
         git clone https://github.com/aircrack-ng/rtl8812au.git
-        sed -i 's/$(CONFIG_88XXAU)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtl8812au\/Kconfig"$/s/.*/ /' Kconfig
+        export ARCH=arm64
+        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
+        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
+        # sed -i 's/$(CONFIG_88XXAU)/m/g' Makefile
+        # sed -i '/^source "drivers\/net\/wireless\/realtek\/rtl8812au\/Kconfig"$/s/.*/ /' Kconfig
         
     - name: Add memkernel module
       shell: bash
