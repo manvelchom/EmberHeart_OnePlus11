@@ -251,18 +251,7 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
-
-    - name: Add rtl88xx modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek"
-        rm -rf rtw88
-        git clone https://github.com/docdry0001/rtl8812au.git
-        mv rtl8812au rtw88
-        
+       
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -303,7 +292,17 @@ runs:
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-
+    - name: Add rtl8812au modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        git clone https://github.com/aircrack-ng/rtl8812au.git
+        sed -i 's/$(CONFIG_88XXAU)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtl8812au\/Kconfig"$/s/.*/ /' Kconfig
+        
     - name: Add memkernel module
       shell: bash
       run: |
