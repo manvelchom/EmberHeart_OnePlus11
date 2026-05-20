@@ -420,7 +420,8 @@ runs:
           --enable CONFIG_MT76x0_COMMON \
           --enable CONFIG_MT7615_COMMON \
           --enable CONFIG_MT7915E \
-          --enable CONFIG_MT7921E
+          --enable CONFIG_MT7921E \
+          -+enable CONFIG_MT7921U
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
