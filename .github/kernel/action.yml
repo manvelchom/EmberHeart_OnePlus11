@@ -612,11 +612,19 @@ runs:
         mv "$RELEASE" backports-stable
         cd backports-stable
     
-        # Patch CFI macro
-        FILE="backport-include/linux/module.h"
-        sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
-        sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+        # 1. Վերանվանում ենք հիմնական ենթահամակարգերի անունները Makefile-ներում (Մակարդակ 1)
+        find . -name "Makefile" -type f -exec sed -i 's/cfg80211-/bp_cfg80211-/g' {} +
+        find . -name "Makefile" -type f -exec sed -i 's/mac80211-/bp_mac80211-/g' {} +
+        sed -i 's/obj-$(CPTCFG_CFG80211) += cfg80211.o/obj-$(CPTCFG_CFG80211) += bp_cfg80211.o/' net/wireless/Makefile
+        sed -i 's/obj-$(CPTCFG_MAC80211) += mac80211.o/obj-$(CPTCFG_MAC80211) += bp_mac80211.o/' net/mac80211/Makefile
     
+        # 2. Փոխում ենք բոլոր վենդորների դրայվերների ներքին կախվածությունները, որպեսզի կապվեն bp_mac80211-ի հետ
+        find drivers/net/wireless/ -name "Makefile" -type f -exec sed -i 's/mac80211/bp_mac80211/g' {} +
+        find drivers/net/wireless/ -name "Kconfig" -type f -exec sed -i 's/MAC80211/BP_MAC80211/g' {} +
+        find drivers/net/wireless/ -name "Makefile" -type f -exec sed -i 's/cfg80211/bp_cfg80211/g' {} +
+        find drivers/net/wireless/ -name "Kconfig" -type f -exec sed -i 's/CFG80211/BP_GRID80211/g' {} +
+    
+        # 3. Ստեղծում ենք նախնական դատարկ կոնֆիգուրացիան
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
     
         # Full CPTCFG list via printf
@@ -762,9 +770,14 @@ runs:
     
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
     
+        # 4. Սահմանում ենք գլոբալ EXTRA_CFLAGS՝ սիմվոլների մեկուսացման (Isolation) համար
+        export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
+    
+        # 5. Գործարկում ենք կոմպիլյացիան 'modules' թիրախով
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" \
           KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" \
-          V=1 2>&1 | tee ../backports-build.log
+          EXTRA_CFLAGS="$EXTRA_CFLAGS" \
+          V=1 modules 2>&1 | tee ../backports-build.log
     
         KO_COUNT=$(find . -name '*.ko' | wc -l)
         echo "Backports built .ko count: $KO_COUNT"
@@ -774,7 +787,10 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
-        
+
+
+
+       
     - name: Archive backports modules (flat)
       if: success()
       shell: bash
