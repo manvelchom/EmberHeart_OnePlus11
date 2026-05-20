@@ -259,12 +259,36 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
+        # ATH drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_ATH \
+          --module CONFIG_ATH_COMMON \
+          --module CONFIG_ATH9K \
+          --module CONFIG_ATH9K_HW \
+          --module CONFIG_ATH9K_HTC \
+          --module CONFIG_ATH9K_COMMON \
+          --module CONFIG_ATH10K \
+          --module CONFIG_ATH10K_USB \
+          --module CONFIG_ATH11K
+          
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
-        # Realtek drivers
+          
+        # Ralink drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_RALINK
+          --enable CONFIG_WLAN_VENDOR_RALINK \
+          --enable CONFIG_RT2X00 \
+          --enable CONFIG_RT2X00_LIB \
+          --module CONFIG_RT2X00_LIB_FIRMWARE \
+          --module CONFIG_RT2X00_USB \
+          --module CONFIG_RT2800LIB \
+          --module CONFIG_RT2800USB \
+          --enable CONFIG_RT2800USB_RT33XX \
+          --enable CONFIG_RT2800USB_RT35XX \
+          --enable CONFIG_RT2800USB_RT3573 \
+          --enable CONFIG_RT2800USB_RT53XX \
+          --enable CONFIG_RT2800USB_RT55XX \
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
@@ -300,11 +324,20 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
         git clone https://github.com/aircrack-ng/rtl8812au.git
-        export ARCH=arm64
         sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
         sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
-        # sed -i 's/$(CONFIG_88XXAU)/m/g' Makefile
-        # sed -i '/^source "drivers\/net\/wireless\/realtek\/rtl8812au\/Kconfig"$/s/.*/ /' Kconfig
+    
+    - name: Add rtw88 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtw88
+        git clone https://github.com/lwfinger/rtw88.git
+        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
         
     - name: Add memkernel module
       shell: bash
