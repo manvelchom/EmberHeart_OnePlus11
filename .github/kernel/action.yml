@@ -614,15 +614,15 @@ runs:
     
         # 1. Վերանվանում ենք հիմնական ենթահամակարգերի անունները Makefile-ներում (Մակարդակ 1)
         find . -name "Makefile" -type f -exec sed -i 's/cfg80211-/bp_cfg80211-/g' {} +
-        find . -name "Makefile" -type f -exec sed -i 's/mac80211-/bp_mac80211-/g' {} +
+        #find . -name "Makefile" -type f -exec sed -i 's/mac80211-/bp_mac80211-/g' {} +
         sed -i 's/obj-$(CPTCFG_CFG80211) += cfg80211.o/obj-$(CPTCFG_CFG80211) += bp_cfg80211.o/' net/wireless/Makefile
-        sed -i 's/obj-$(CPTCFG_MAC80211) += mac80211.o/obj-$(CPTCFG_MAC80211) += bp_mac80211.o/' net/mac80211/Makefile
+        #sed -i 's/obj-$(CPTCFG_MAC80211) += mac80211.o/obj-$(CPTCFG_MAC80211) += bp_mac80211.o/' net/mac80211/Makefile
     
         # 2. Փոխում ենք բոլոր վենդորների դրայվերների ներքին կախվածությունները, որպեսզի կապվեն bp_mac80211-ի հետ
-        find drivers/net/wireless/ -name "Makefile" -type f -exec sed -i 's/mac80211/bp_mac80211/g' {} +
-        find drivers/net/wireless/ -name "Kconfig" -type f -exec sed -i 's/MAC80211/BP_MAC80211/g' {} +
+        #find drivers/net/wireless/ -name "Makefile" -type f -exec sed -i 's/mac80211/bp_mac80211/g' {} +
+        #find drivers/net/wireless/ -name "Kconfig" -type f -exec sed -i 's/MAC80211/BP_MAC80211/g' {} +
         find drivers/net/wireless/ -name "Makefile" -type f -exec sed -i 's/cfg80211/bp_cfg80211/g' {} +
-        find drivers/net/wireless/ -name "Kconfig" -type f -exec sed -i 's/CFG80211/BP_GRID80211/g' {} +
+        find drivers/net/wireless/ -name "Kconfig" -type f -exec sed -i 's/CFG80211/BP_CFG80211/g' {} +
     
         # 3. Ստեղծում ենք նախնական դատարկ կոնֆիգուրացիան
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
