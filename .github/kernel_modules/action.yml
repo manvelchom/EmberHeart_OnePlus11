@@ -260,7 +260,7 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek"
         rm -rf rtw88
-        git clone -b mediatek https://github.com/docdry0001/rtl8812au.git
+        git clone https://github.com/docdry0001/rtl8812au.git
         mv rtl8812au rtw88
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
