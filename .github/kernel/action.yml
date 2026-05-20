@@ -558,6 +558,14 @@ runs:
           --enable CONFIG_RT2800USB_RT53XX \
           --enable CONFIG_RT2800USB_RT55XX \
           --enable CONFIG_RT2800USB_UNKNOWN
+        
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_MT7601U \
+          --enable CONFIG_MT76_CORE \
+          --enable CONFIG_MT76_USB \
+          --enable CONFIG_MT76_CONNAC_LIB \
+          --enable CONFIG_MT7921_COMMON \
+          --enable CONFIG_MT7921U
 
         echo "Nethunter configs applied"
         echo "::endgroup::"
