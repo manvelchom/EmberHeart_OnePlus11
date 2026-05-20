@@ -415,21 +415,18 @@ runs:
           --enable CONFIG_USB_SERIAL_CH341 \
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
-      
+        # MT76 MOULES ON
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --enable CONFIG_MT7601U \
+          --enable CONFIG_MT76_CORE \
+        	--enable CONFIG_MT76_USB \
+        	--enable CONFIG_MT76_CONNAC_LIB \
+          --enable CONFIG_MT7921_COMMON \
+          --enable CONFIG_MT7921U 
           echo "Nethunter configs applied ✅"
           echo "::endgroup::"
 
-    - name: Add MT76
-      shell: bash
-      run: |
-        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
-          CONFIG_WLAN_VENDOR_MEDIATEK=y
-        	CONFIG_MT76_CORE=y
-        	CONFIG_MT76_USB=y
-        	CONFIG_MT76_CONNAC_LIB=y
-          CONFIG_MT7921_COMMON=y
-          CONFIG_MT7921U=m
-        EOF
 
     - name: Add Other configs
       shell: bash
