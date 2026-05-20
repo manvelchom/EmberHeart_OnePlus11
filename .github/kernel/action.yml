@@ -1010,7 +1010,7 @@ runs:
           'CPTCFG_MHI_BUS=m' \
           'CPTCFG_QRTR=m' \
           'CPTCFG_QRTR_MHI=m' \
-         >> .config
+          >> .config
         
         make "${MAKE_FLAGS[@]}" \
           KLIB="$KERNEL_BUILD" \
