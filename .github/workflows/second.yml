@@ -1,4 +1,4 @@
-name: Build and Release OnePlus EmberHeart Kernel and Kernel Modules
+name: Build One Kernel
 
 permissions:
   contents: write
