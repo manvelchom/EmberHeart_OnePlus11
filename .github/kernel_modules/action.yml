@@ -252,16 +252,16 @@ runs:
         rm "$OUT/.config"
 
 
-    # - name: Add mt76 modules
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-    #     MSM="$KERNEL_PATH/msm-kernel"
-    #     cd "$MSM/drivers/net/wireless"
-    #     rm -rf mediatek 
-    #     git clone -b mediatek https://github.com/docdry0001/mt7921.git
-    #     mv mt7921 mediatek 
+    - name: Add rtl88xx modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek"
+        rm -rf rtw88
+        git clone -b mediatek https://github.com/docdry0001/rtl8812au.git
+        mv rtl8812au rtw88
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
@@ -273,6 +273,9 @@ runs:
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
+        # Realtek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_RALINK
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
