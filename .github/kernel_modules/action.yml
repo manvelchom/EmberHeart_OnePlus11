@@ -421,8 +421,8 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
         rm -rf rtlwifi
-        git clone https://github.com/docdry0001/rtl88x2bu.git
-        mv rtl88x2bu rtlwifi
+        git clone https://github.com/docdry0001/rtl8812au.git
+        mv rtl8812au rtlwifi
         cf rtlwifi
         sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
         sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
