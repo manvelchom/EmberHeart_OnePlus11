@@ -874,29 +874,23 @@ runs:
         # Full CPTCFG list via printf
         printf '%s\n' \
           'CPTCFG_CFG80211=m' \
-          'CPTCFG_CFG80211_DEFAULT_PS=y' \
-          'CPTCFG_CFG80211_DEBUGFS=y' \
-          'CPTCFG_CFG80211_WEXT=y' \
+          # 'CPTCFG_CFG80211_DEFAULT_PS=y' \
+          # 'CPTCFG_CFG80211_DEBUGFS=y' \
+          # 'CPTCFG_CFG80211_WEXT=y' \
           'CPTCFG_MAC80211=m' \
-          'CPTCFG_MAC80211_LEDS=y' \
-          'CPTCFG_MAC80211_MESH=y' \
-          'CPTCFG_MAC80211_DEBUGFS=y' \
-          'CPTCFG_MAC80211_MESSAGE_TRACING=y' \
-          'CPTCFG_WLAN=y' \
-          'CPTCFG_NL80211_TESTMODE=y' \
-          'CPTCFG_USB=y' \
-          'CPTCFG_PCI=y' \
+          # 'CPTCFG_MAC80211_LEDS=y' \
+          # 'CPTCFG_MAC80211_MESH=y' \
+          # 'CPTCFG_MAC80211_DEBUGFS=y' \
+          # 'CPTCFG_MAC80211_MESSAGE_TRACING=y' \
+          # 'CPTCFG_WLAN=y' \
           'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
           'CPTCFG_MT76_CORE=m' \
           'CPTCFG_MT76_USB=m' \
-          'CPTCFG_MT76_PCI=m' \
-          'CPTCFG_MT76_SDIO=m' \
           'CPTCFG_MT76_CONNAC_LIB=m' \
           'CPTCFG_MT792x_USB=m' \
           'CPTCFG_MT792x_LIB=m' \
           'CPTCFG_MT7921_COMMON=m' \
           'CPTCFG_MT7921U=m' \
-          'CPTCFG_MT7921E=m' \
           >> .config
         
         make "${MAKE_FLAGS[@]}" \
