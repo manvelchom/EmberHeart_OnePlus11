@@ -551,7 +551,7 @@ runs:
           --module CONFIG_MT7663U \
           --enable CONFIG_MT7663S \
           --enable CONFIG_MT7915E \
-          --enable CONFIC_MT7921_COMMON
+          --enable CONFIC_MT7921_COMMON \
           --enable CONFIG_MT7921E \
           --enable CONFIG_MT7921U
         echo "Nethunter configs applied"
