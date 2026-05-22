@@ -280,7 +280,7 @@ runs:
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
           --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_SDIO
+          --module CONFIG_MT76_SDIO \
           --module CONFIG_MT76_LEDS \
           --module CONFIG_MT76_USB \
           --module CONFIG_MT76x02_LIB \
