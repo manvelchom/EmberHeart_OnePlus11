@@ -454,32 +454,6 @@ runs:
         echo "::group::Applying Nethunter configs..."
         cd "$CONFIG/kernel_platform/common"
 
-        # Import Ralink rt2x00 driver subtree
-        RT2X00_TMP="$GITHUB_WORKSPACE/rt2x00-import"
-        KERNEL_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
-        
-        rm -rf "$RT2X00_TMP"
-        git clone --depth=1 https://github.com/torvalds/linux.git "$RT2X00_TMP"
-        
-        mkdir -p "$KERNEL_DIR/drivers/net/wireless/ralink"
-        rm -rf "$KERNEL_DIR/drivers/net/wireless/ralink/rt2x00"
-        cp -a "$RT2X00_TMP/drivers/net/wireless/ralink/rt2x00" \
-              "$KERNEL_DIR/drivers/net/wireless/ralink/"
-        
-        if ! grep -q 'drivers/net/wireless/ralink/rt2x00/Kconfig' \
-            "$KERNEL_DIR/drivers/net/wireless/ralink/Kconfig"; then
-          printf '\nsource "drivers/net/wireless/ralink/rt2x00/Kconfig"\n' \
-            >> "$KERNEL_DIR/drivers/net/wireless/ralink/Kconfig"
-        fi
-        
-        if ! grep -q 'obj-$(CONFIG_RT2X00) += rt2x00/' \
-            "$KERNEL_DIR/drivers/net/wireless/ralink/Makefile"; then
-          printf '\nobj-$(CONFIG_RT2X00) += rt2x00/\n' \
-            >> "$KERNEL_DIR/drivers/net/wireless/ralink/Makefile"
-        fi
-        
-        cd "$KERNEL_DIR"
-
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_BT_HCIBTUSB \
           --enable CONFIG_BT_HCIBTUSB_BCM \
