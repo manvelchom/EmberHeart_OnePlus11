@@ -423,7 +423,7 @@ runs:
         rm -rf rtlwifi
         git clone https://github.com/docdry0001/rtl8812au.git
         mv rtl8812au rtlwifi
-        cf rtlwifi
+        cd rtlwifi
         sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
         sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
         
