@@ -155,9 +155,9 @@ runs:
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         "$REPO" --version
         success=false
@@ -251,7 +251,6 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
-       
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -259,6 +258,11 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
+        
+        # Realtek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_REALTEK
+
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_ATH \
@@ -270,75 +274,33 @@ runs:
           --module CONFIG_ATH10K \
           --module CONFIG_ATH10K_USB \
           --module CONFIG_ATH11K
-          
-        # Realtek drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK
-          
-        # Ralink drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_RALINK \
-          --enable CONFIG_RT2X00 \
-          --enable CONFIG_RT2X00_LIB \
-          --module CONFIG_RT2X00_LIB_FIRMWARE \
-          --module CONFIG_RT2X00_USB \
-          --module CONFIG_RT2800LIB \
-          --module CONFIG_RT2800USB \
-          --enable CONFIG_RT2800USB_RT33XX \
-          --enable CONFIG_RT2800USB_RT35XX \
-          --enable CONFIG_RT2800USB_RT3573 \
-          --enable CONFIG_RT2800USB_RT53XX \
-          --enable CONFIG_RT2800USB_RT55XX \
+
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
           --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x2U \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT76x0U \
           --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7622_WMAC \
-          --module CONFIG_MT7663_USB_SDIO_COMMON \
-          --module CONFIG_MT7663U \
-          --module CONFIG_MT7663S \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7986_WMAC \
-          --module CONFIG_MT7921_COMMON \
           --module CONFIG_MT7921E \
           --module CONFIG_MT7921U
+
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-    - name: Add rtl8812au modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        git clone https://github.com/aircrack-ng/rtl8812au.git
-        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
-        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
-    
-    - name: Add rtw88 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-        
+
+          
+
     - name: Add memkernel module
       shell: bash
       run: |
@@ -349,7 +311,7 @@ runs:
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
         
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'valod'
       shell: bash
       run: |
         set -euo pipefail
@@ -451,7 +413,32 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
         
+    - name: Add rtw88 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtw88
+        git clone https://github.com/lwfinger/rtw88.git
+        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
+
+    - name: Add rtl88xxau modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtlwifi
+        git clone https://github.com/docdry0001/rtl88x2bu.git
+        mv rtl88x2bu rtlwifi
+        sed -i 's/$(CONFIG_RTLWIFI)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtlwifi\/Kconfig"$/s/.*/ /' Kconfig
         
+
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
@@ -484,7 +471,7 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
-        
+
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
 
@@ -612,7 +599,7 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-        
+
     - name: Filter modules
       shell: bash
       run: |
@@ -631,7 +618,7 @@ runs:
         echo "Removing unnecessary modules..."
         cd modules
         # Download default module list
-        curl -L -o default_modules.txt https://raw.githubusercontent.com/docdry0001/kernel_patchel/refs/heads/main/default_modules.txt
+        curl -L -o default_modules.txt https://raw.githubusercontent.com/docdry0001/kernel_patches/refs/heads/main/default_modules.txt
         # Remove modules in the default list
 
         while IFS= read -r module; do
