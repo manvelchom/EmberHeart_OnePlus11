@@ -547,6 +547,7 @@ runs:
           --enable CONFIG_MT76x0U \
           --enable CONFIG_MT76x0E \
           --enable CONFIG_MT7615_COMMON \
+          --enable CONFIG_MT7663_USB_SDIO_COMMON \
           --module CONFIG_MT7663U \
           --enable CONFIG_MT7663S \
           --enable CONFIG_MT7915E \
