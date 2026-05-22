@@ -413,18 +413,6 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
         
-    - name: Add rtw88 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-
     - name: Add rtl88xxau modules
       shell: bash
       run: |
@@ -435,8 +423,9 @@ runs:
         rm -rf rtlwifi
         git clone https://github.com/docdry0001/rtl88x2bu.git
         mv rtl88x2bu rtlwifi
-        sed -i 's/$(CONFIG_RTLWIFI)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtlwifi\/Kconfig"$/s/.*/ /' Kconfig
+        cf rtlwifi
+        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
+        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
         
 
     - name: Detect Clang (toolchain for build)
