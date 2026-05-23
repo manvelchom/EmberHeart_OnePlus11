@@ -559,7 +559,7 @@ runs:
 
 
     - name: Add Other configs
-      if: env.KERNEL_VER == '5.10'
+      if: env.KERNEL_VER == '5.15'
       shell: bash
       run: |
         set -euo pipefail
@@ -571,7 +571,7 @@ runs:
 
         # Add for Droidspaces support
         # TODO: This patch is not universal add conditions for other kernel versions!
-        #       for now Droidspaces support for kernels other than 5.10 is restricted
+        #       for now Droidspaces support for kernels other than 5.15 is restricted
         if patch -R -p1 -s -f --dry-run < "$WILD_KERNEL_PATCHES/common/droidspaces/fix_sysvipc_kabi_1_2_3.patch" >/dev/null 2>&1 || \
            patch -R -p1 -s -f --dry-run < "$WILD_KERNEL_PATCHES/common/droidspaces/fix_sysvipc_kabi_3_4_5.patch" >/dev/null 2>&1 || \
            patch -R -p1 -s -f --dry-run < "$WILD_KERNEL_PATCHES/common/droidspaces/fix_sysvipc_kabi_6_7_8.patch">/dev/null 2>&1; then
@@ -896,16 +896,16 @@ runs:
           'CPTCFG_CFG80211=m' \
           'CPTCFG_CFG80211_DEFAULT_PS=y' \
           'CPTCFG_CFG80211_DEBUGFS=y' \
-          'CPTCFG_CFG80211_WEXT=y' \
+          'CPTCFG_CFG80211_WEXT=m' \
           'CPTCFG_MAC80211=m' \
-          'CPTCFG_MAC80211_LEDS=y' \
-          'CPTCFG_MAC80211_MESH=y' \
-          'CPTCFG_MAC80211_DEBUGFS=y' \
-          'CPTCFG_MAC80211_MESSAGE_TRACING=y' \
-          'CPTCFG_WLAN=y' \
-          'CPTCFG_NL80211_TESTMODE=y' \
-          'CPTCFG_USB=y' \
-          'CPTCFG_PCI=y' \
+          'CPTCFG_MAC80211_LEDS=m' \
+          'CPTCFG_MAC80211_MESH=m' \
+          'CPTCFG_MAC80211_DEBUGFS=m' \
+          'CPTCFG_MAC80211_MESSAGE_TRACING=m' \
+          'CPTCFG_WLAN=m' \
+          'CPTCFG_NL80211_TESTMODE=m' \
+          'CPTCFG_USB=m' \
+          'CPTCFG_PCI=m' \
           'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
           'CPTCFG_MT76_CORE=m' \
           'CPTCFG_MT76_USB=m' \
