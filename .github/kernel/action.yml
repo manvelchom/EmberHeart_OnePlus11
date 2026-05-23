@@ -32,7 +32,7 @@ inputs:
   backports_release:
     required: false
     type: string
-    default: backports-6.18
+    default: backports-6.1.145-1
 
 outputs:
   kernel_version:
@@ -829,12 +829,12 @@ runs:
     # ==================== NEW: Build OpenWrt backports v6.19 – FULL Wi-Fi STACK ====================
 
     
-    - name: Build Backports v6.19 (Full Wi-Fi driver set)
+    - name: Build Backports v6.1.145 (Full Wi-Fi driver set)
       shell: bash
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
-        URL="https://github.com/openwrt/backports/releases/download/backports-v6.18/backports-6.18.tar.zst"
+        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.145/backports-6.1.145-1.tar.xz"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
 
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
