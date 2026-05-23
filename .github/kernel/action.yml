@@ -916,7 +916,7 @@ runs:
           'CPTCFG_MAC80211_HWSIM=m' \
           'CPTCFG_MAC80211_LEDS=y' \
           'CPTCFG_MAC80211=m' \
-          'CPTCFG_MAC80211_MESH=y' \
+          #'CPTCFG_MAC80211_MESH=y' \
           'CPTCFG_MHI_BUS=m' \
           'CPTCFG_MT7601U=m' \
           'CPTCFG_MT7603E=m' \
@@ -1024,7 +1024,7 @@ runs:
           'CPTCFG_WLCORE=m' \
           'CPTCFG_WLCORE_SDIO=m' \
           'CPTCFG_WLCORE_SPI=m' \
-          'CPTCFG_ZD1211RW=m' \
+          'CPTCFG_ZD1211RW=m'
           >> .config
         
         make "${MAKE_FLAGS[@]}" \
