@@ -354,7 +354,7 @@ runs:
         grep -n "scan_adjusted" vmscan.c | head -20
 
     - name: FIX thermal kvzalloc kvfree (waipio)
-      if: env.SOC == 'valod'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
