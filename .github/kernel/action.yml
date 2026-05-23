@@ -32,7 +32,7 @@ inputs:
   backports_release:
     required: false
     type: string
-    default: backports-6.1.145-1
+    default: backports-6.1.97-1
 
 outputs:
   kernel_version:
@@ -834,7 +834,7 @@ runs:
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
-        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.145/backports-6.1.145-1.tar.xz"
+        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
 
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
@@ -880,8 +880,6 @@ runs:
           'CPTCFG_ATH10K_PCI=m' \
           'CPTCFG_ATH10K_SDIO=m' \
           'CPTCFG_ATH10K_USB=m' \
-          'CPTCFG_ATH11K=m' \
-          'CPTCFG_ATH11K_PCI=m' \
           'CPTCFG_ATH5K=m' \
           'CPTCFG_ATH6KL=m' \
           'CPTCFG_ATH6KL_SDIO=m' \
