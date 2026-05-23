@@ -32,7 +32,7 @@ inputs:
   backports_release:
     required: false
     type: string
-    default: backports-6.19
+    default: backports-6.18
 
 outputs:
   kernel_version:
@@ -834,7 +834,7 @@ runs:
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
-        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/backports-6.19.tar.zst"
+        URL="https://github.com/openwrt/backports/releases/download/backports-v6.18/backports-6.18.tar.zst"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
 
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
