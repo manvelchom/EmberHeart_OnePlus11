@@ -564,7 +564,7 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Adding other configs..."
-        cd "$COMMON"
+        cd "$CONFIG/kernel_platform/common"
 
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_LRU_GEN_ENABLED
