@@ -354,7 +354,7 @@ runs:
         grep -n "scan_adjusted" vmscan.c | head -20
 
     - name: FIX thermal kvzalloc kvfree (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'valod'
       shell: bash
       run: |
         set -euo pipefail
@@ -395,7 +395,7 @@ runs:
 
     
     - name: FIX binder mmget_still_valid compat (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'vlod'
       shell: bash
       run: |
         set -euo pipefail
@@ -425,10 +425,10 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtlwifi
+        rm -rf rtw88
         git clone https://github.com/docdry0001/rtl8812au.git
         mv rtl8812au rtlwifi
-        cd rtlwifi
+        cd rtw88
         sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
         sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
         
