@@ -393,9 +393,8 @@ runs:
         echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
 
-    
     - name: FIX binder mmget_still_valid compat (waipio)
-      if: env.SOC == 'vlod'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
