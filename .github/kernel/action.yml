@@ -249,50 +249,50 @@ runs:
         	CONFIG_KSU_KPROBES_HOOK=n
         EOF
 
-    - name: Apply SUSFS Patches (v2.1.0)
-      shell: bash
-      run: |
-        cd "$KERNEL_PLATFORM_FOLDER"
-        cp "$SUSFS_FOLDER/kernel_patches/fs/"* "$COMMON_KERNEL_FOLDER/fs/"
-        cp "$SUSFS_FOLDER/kernel_patches/include/linux/"* "$COMMON_KERNEL_FOLDER/include/linux/"
-        susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
-        echo "SUSVER=$susfs_version" >> $GITHUB_ENV
-        cd "$KSUN_FOLDER"
-        patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
-        for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch" || true
-        done
-        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch" || true
-        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch" || true
-        if [ "$KSUVER" -le 33095 ]; then
-          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch" || true
-        fi
-        cd kernel
-        sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
-        sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' core/init.c
-        cd "$COMMON_KERNEL_FOLDER"
-        patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch" || true
-        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
-        	CONFIG_KSU_SUSFS=y
-        	CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-        	CONFIG_KSU_SUSFS_SUS_PATH=y
-        	CONFIG_KSU_SUSFS_SUS_MOUNT=y
-        	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-        	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-        	CONFIG_KSU_SUSFS_SUS_KSTAT=y
-        	CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-        	CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-        	CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-        	CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-        	CONFIG_KSU_SUSFS_ENABLE_LOG=y
-        	CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-        	CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-        	CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-        	CONFIG_KSU_SUSFS_SUS_MAP=y
-        	CONFIG_KSU_SUSFS_SUS_SU=n
-        	CONFIG_TMPFS_XATTR=y
-        	CONFIG_TMPFS_POSIX_ACL=y
-        EOF
+    # - name: Apply SUSFS Patches (v2.1.0)
+    #   shell: bash
+    #   run: |
+    #     cd "$KERNEL_PLATFORM_FOLDER"
+    #     cp "$SUSFS_FOLDER/kernel_patches/fs/"* "$COMMON_KERNEL_FOLDER/fs/"
+    #     cp "$SUSFS_FOLDER/kernel_patches/include/linux/"* "$COMMON_KERNEL_FOLDER/include/linux/"
+    #     susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
+    #     echo "SUSVER=$susfs_version" >> $GITHUB_ENV
+    #     cd "$KSUN_FOLDER"
+    #     patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+    #     for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+    #       patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch" || true
+    #     done
+    #     patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch" || true
+    #     patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch" || true
+    #     if [ "$KSUVER" -le 33095 ]; then
+    #       patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch" || true
+    #     fi
+    #     cd kernel
+    #     sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
+    #     sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' core/init.c
+    #     cd "$COMMON_KERNEL_FOLDER"
+    #     patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch" || true
+    #     cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
+    #     	CONFIG_KSU_SUSFS=y
+    #     	CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+    #     	CONFIG_KSU_SUSFS_SUS_PATH=y
+    #     	CONFIG_KSU_SUSFS_SUS_MOUNT=y
+    #     	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+    #     	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+    #     	CONFIG_KSU_SUSFS_SUS_KSTAT=y
+    #     	CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
+    #     	CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+    #     	CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+    #     	CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+    #     	CONFIG_KSU_SUSFS_ENABLE_LOG=y
+    #     	CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+    #     	CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+    #     	CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+    #     	CONFIG_KSU_SUSFS_SUS_MAP=y
+    #     	CONFIG_KSU_SUSFS_SUS_SU=n
+    #     	CONFIG_TMPFS_XATTR=y
+    #     	CONFIG_TMPFS_POSIX_ACL=y
+    #     EOF
 
     - name: Add BBG
       shell: bash
