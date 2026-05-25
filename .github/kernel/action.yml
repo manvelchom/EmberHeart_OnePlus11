@@ -560,6 +560,22 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        RELEASE="backports-6.1.97-1"
+        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
+
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
+
+        cd "$GITHUB_WORKSPACE"
+        wget -q -O backports.tar.xz "$URL"
+        tar -xf backports.tar.xz
+        rm -rf backports-stable
+        mv "$RELEASE" backports-stable
+        cd backports-stable
+
         cd "$GITHUB_WORKSPACE/backports-stable"
         find . -name "Makefile" -type f -exec sed -i 's/cfg80211-/bp_cfg80211-/g' {} +
         find . -name "Makefile" -type f -exec sed -i 's/mac80211-/bp_mac80211-/g' {} +
@@ -569,7 +585,7 @@ runs:
           find drivers/net/wireless/mediatek/mt76/ -name "Makefile" -type f -exec sed -i 's/mac80211/bp_mac80211/g' {} +
           find drivers/net/wireless/mediatek/mt76/ -name "Kconfig" -type f -exec sed -i 's/MAC80211/BP_MAC80211/g' {} +
         fi
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
         if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
           export PATH="${CLANG_BIN}:$PATH"
         fi
