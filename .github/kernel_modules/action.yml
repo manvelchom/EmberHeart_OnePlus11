@@ -451,30 +451,40 @@ runs:
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
         
-        MAKE_FLAGS=(
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=ccache\ clang
-        )
-
-
-        make 
+    - name: Add rtl88xxau modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        KERNEL_SRC="$KERNEL_PLATFORM/msm-kernel"
+        MODULE_PATH="$KERNEL_SRC/rtl8812au"
+    
+        cd "$KERNEL_SRC"
+        git clone https://github.com/docdry0001/rtl8812au.git
+    
+        # Կարգավորել Makefile-ը Android ARM64-ի համար
+        cd "$MODULE_PATH"
+        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
+        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
+    
+        # Սահմանել toolchain-ը
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
+    
+        # Կոմպիլյացնել մոդուլը
+        make -C "$KERNEL_SRC" M="$(pwd)" \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            KSRC="$KERNEL_SRC" \
+            modules
+    
+        # (Ոչ պարտադիր) Մոդուլի տեղադրում
+        #mkdir -p "$KERNEL_SRC/out"
+        #make -C "$KERNEL_SRC" M="$(pwd)" \
+        #    INSTALL_MOD_PATH="$KERNEL_SRC/out" \
+        #    modules_install
+    
+        echo "Module built successfully: $(find "$MODULE_PATH" -name "*.ko")"
 
     - name: Build Kernel Modules
       shell: bash
