@@ -477,7 +477,7 @@ runs:
         INSTALL_MOD_PATH="$MSM/out"
         mkdir -p "$OUT"
 
-        make "${MAKE_FLAGS[@]}" O="$OUT" rtl_defconfig
+        make "${MAKE_FLAGS[@]}"
 
     - name: Build Kernel Modules
       shell: bash
