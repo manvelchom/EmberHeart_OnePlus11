@@ -259,10 +259,6 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
         
-        # Realtek drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK
-
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_ATH \
@@ -452,13 +448,36 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
         git clone https://github.com/docdry0001/rtl8812au.git
-        cd rtl8812au
-        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
-        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
+        
+        MAKE_FLAGS=(
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          DEPMOD=depmod
+          DTC=dtc
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
+          CC=ccache\ clang
+        )
+        
+        OUT=out
+        INSTALL_MOD_PATH="$MSM/out"
+        mkdir -p "$OUT"
 
-        make
+        make "${MAKE_FLAGS[@]}" O="$OUT" rtl_defconfig
 
     - name: Build Kernel Modules
       shell: bash
