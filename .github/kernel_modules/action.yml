@@ -440,40 +440,6 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
         
-    - name: Add rtl88xxau modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        KERNEL_SRC="$KERNEL_PLATFORM/msm-kernel"
-        MODULE_PATH="$KERNEL_SRC/rtl8812au"
-    
-        cd "$KERNEL_SRC"
-        git clone https://github.com/docdry0001/rtl8812au.git
-    
-        # Կարգավորել Makefile-ը Android ARM64-ի համար
-        cd "$MODULE_PATH"
-        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
-        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
-    
-        # Սահմանել toolchain-ը
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        # Կոմպիլյացնել մոդուլը
-        make -C "$KERNEL_SRC" M="$(pwd)" \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            KSRC="$KERNEL_SRC" \
-            modules
-    
-        # (Ոչ պարտադիր) Մոդուլի տեղադրում
-        #mkdir -p "$KERNEL_SRC/out"
-        #make -C "$KERNEL_SRC" M="$(pwd)" \
-        #    INSTALL_MOD_PATH="$KERNEL_SRC/out" \
-        #    modules_install
-    
-        echo "Module built successfully: $(find "$MODULE_PATH" -name "*.ko")"
 
     - name: Build Kernel Modules
       shell: bash
@@ -610,7 +576,56 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
+    - name: Add rtl88xxau modules (after kernel build)
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        KERNEL_SRC="$KERNEL_PLATFORM/msm-kernel"
+        MODULE_PATH="$KERNEL_SRC/rtl8812au"
+        OUT="out"
+        INSTALL_MOD_PATH="$KERNEL_SRC/$OUT"
     
+        # Clone driver (եթե արդեն կա, կարող ես բաց թողնել)
+        if [ ! -d "$MODULE_PATH" ]; then
+          cd "$KERNEL_SRC"
+          git clone https://github.com/docdry0001/rtl8812au.git
+        fi
+    
+        # Կարգավորել Makefile-ը Android ARM64-ի համար
+        cd "$MODULE_PATH"
+        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
+        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
+    
+        # Միջավայրի փոփոխականներ (ինչպես kernel build-ում)
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+        export LLVM=1
+        export LLVM_IAS=1
+        export CLANG_TRIPLE=aarch64-linux-gnu-
+        export LD=ld.lld
+        export HOSTLD=ld.lld
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
+        export HOSTCC=clang
+        export HOSTCXX=clang++
+        export CC="ccache clang"
+    
+        # Կոմպիլյացիա (KERNEL_SRC + O=$OUT)
+        make -C "$KERNEL_SRC" O="$OUT" M="$(pwd)" modules
+    
+        # Տեղադրում (նույն INSTALL_MOD_PATH-ը, որտեղ կան մյուս մոդուլները)
+        make -C "$KERNEL_SRC" O="$OUT" M="$(pwd)" \
+          INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+    
+        echo "✅ rtl8812au module built and installed to $INSTALL_MOD_PATH"
 
     - name: Filter modules
       shell: bash
