@@ -447,7 +447,7 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-        git clone https://github.com/docdry0001/rtl8812au.git
+        git clone https://github.com/aircrack-ng/rtl8812au.git
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
         
@@ -472,12 +472,9 @@ runs:
           HOSTCXX=clang++
           CC=ccache\ clang
         )
-        
-        OUT=out
-        INSTALL_MOD_PATH="$MSM/out"
-        mkdir -p "$OUT"
 
-        make "${MAKE_FLAGS[@]}"
+
+        make 
 
     - name: Build Kernel Modules
       shell: bash
