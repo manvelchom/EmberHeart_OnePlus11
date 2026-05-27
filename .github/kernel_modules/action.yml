@@ -439,17 +439,6 @@ runs:
         CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
-
-    - name: Add rtl88xxau modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM"
-        git clone https://github.com/aircrack-ng/rtl8812au.git
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
         
     - name: Add rtl88xxau modules
       shell: bash
