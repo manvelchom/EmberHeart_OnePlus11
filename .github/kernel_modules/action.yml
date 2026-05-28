@@ -261,7 +261,7 @@ runs:
         
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK
+          --enable CONFIG_WLAN_VENDOR_REALTEK \
 
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -316,7 +316,7 @@ runs:
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
         
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'valod'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
@@ -417,20 +417,6 @@ runs:
         echo "[+] Verifying binder fix..."
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
-        
-    - name: Add rtl88xxau modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtlwifi
-        git clone https://github.com/docdry0001/rtl8812au.git
-        mv rtl8812au rtlwifi
-        cd rtlwifi
-        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
-        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
         
 
     - name: Detect Clang (toolchain for build)
@@ -593,6 +579,19 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
+
+    - name: Add rtl88xxau modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        git clone https://github.com/docdry0001/rtl8812au.git
+        cd rtlwifi
+        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
+        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
+        
 
     - name: Filter modules
       shell: bash
