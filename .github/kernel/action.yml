@@ -123,9 +123,9 @@ runs:
         if [[ "$OP_MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --location --proto '=https' "$OP_MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         success=false
         for i in 1 2 3; do
@@ -327,110 +327,29 @@ runs:
     - name: Add Nethunter Inline Configs
       shell: bash
       run: |
-        set -euo pipefail
-        echo "::group::Applying Nethunter configs..."
         cd "$COMMON_KERNEL_FOLDER"
-
-        # Bluetooth configs
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_BT_HCIBTUSB \
-          --enable CONFIG_BT_HCIBTUSB_BCM \
-          --enable CONFIG_BT_HCIBTUSB_RTL \
-          --enable CONFIG_BT_HCIVHCI \
-          --enable CONFIG_BT_HCIBCM203X \
-          --enable CONFIG_BT_HCIBPA10X \
-          --enable CONFIG_BT_HCIBFUSB
-
-        # Airspy & HackRF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_USB_AIRSPY \
-          --enable CONFIG_USB_HACKRF
-
-        # CAN
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN \
-          --enable CONFIG_CAN_DEV \
-          --enable CONFIG_CAN_CALC_BITTIMING \
-          --enable CONFIG_CAN_LEDS \
-          --enable CONFIG_CAN_VCAN \
-          --enable CONFIG_CAN_GRCAN \
-          --enable CONFIG_CAN_XILINXCAN
-
-        # Bosch C_CAN/D_CAN devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_C_CAN \
-          --enable CONFIG_CAN_C_CAN_PLATFORM \
-          --enable CONFIG_CAN_C_CAN_PCI
-
-        # Bosch CC770 and Intel AN82527 devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_CC770 \
-          --enable CONFIG_CAN_CC770_ISA \
-          --enable CONFIG_CAN_CC770_PLATFORM
-
-        # Bosch M_CAN devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_M_CAN \
-          --enable CONFIG_CAN_M_CAN_PCI \
-          --enable CONFIG_CAN_M_CAN_PLATFORM \
-          --enable CONFIG_CAN_M_CAN_TCAN4X5X
-
-        # CAN SPI interfaces
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_HI311X \
-          --enable CONFIG_CAN_MCP251X
-
-        # CAN USB interfaces
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_8DEV_USB \
-          --enable CONFIG_CAN_EMS_USB \
-          --enable CONFIG_CAN_ESD_USB2 \
-          --enable CONFIG_CAN_GS_USB \
-          --enable CONFIG_CAN_KVASER_USB \
-          --enable CONFIG_CAN_PEAK_USB
-
-        # CAN - Networking
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_NETLINK_DIAG \
-          --enable CONFIG_VSOCKETS \
-          --enable CONFIG_NET_SCHED \
-          --enable CONFIG_NET_EMATCH_CANID
-
-        # USB Serial Converter
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_USB_SERIAL \
-          --enable CONFIG_USB_SERIAL_CONSOLE \
-          --enable CONFIG_USB_SERIAL_GENERIC \
-          --enable CONFIG_USB_SERIAL_CH341 \
-          --enable CONFIG_USB_SERIAL_FTDI_SIO \
-          --enable CONFIG_USB_SERIAL_PL2303
-
-        # Mediatek drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --enable CONFIG_MT7601U \
-          --enable CONFIG_MT76_CORE \
-          --enable CONFIG_MT76_PCI \
-          --enable CONFIG_MT76_USB \
-          --enable CONFIG_MT76x02_LIB \
-          --enable CONFIG_MT76x02_USB \
-          --enable CONFIG_MT76_CONNAC_LIB \
-          --enable CONFIG_MT7603E \
-          --enable CONFIG_MT76x2_COMMON \
-          --enable CONFIG_MT76x0_COMMON \
-          --enable CONFIG_MT7615_COMMON \
-          --enable CONFIG_MT7915E \
-          --enable CONFIG_MT7921_COMMON \
-          --enable CONFIG_MT7921E \
-          --enable CONFIG_MT7921U
-
-        # Other configs
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_MAC80211_LEDS \
-          --enable CONFIG_CAN_SLCAN
-          
-        echo "Nethunter configs applied ✅"
-        echo "::endgroup::"
+        cat >> arch/arm64/configs/gki_defconfig <<-EOF
+        	CONFIG_BT_HCIBTUSB=y
+        	CONFIG_BT_HCIBTUSB_BCM=y
+        	CONFIG_BT_HCIBTUSB_RTL=y
+        	CONFIG_USB_AIRSPY=y
+        	CONFIG_USB_HACKRF=y
+        	CONFIG_CAN=y
+        	CONFIG_CAN_DEV=y
+        	CONFIG_CAN_VCAN=y
+        	CONFIG_CAN_8DEV_USB=y
+        	CONFIG_CAN_EMS_USB=y
+        	CONFIG_CAN_GS_USB=y
+        	CONFIG_CAN_PEAK_USB=y
+        	CONFIG_NETLINK_DIAG=y
+        	CONFIG_VSOCKETS=y
+        	CONFIG_USB_SERIAL=y
+        	CONFIG_USB_SERIAL_CONSOLE=y
+        	CONFIG_USB_SERIAL_GENERIC=y
+        	CONFIG_USB_SERIAL_CH341=y
+        	CONFIG_USB_SERIAL_FTDI_SIO=y
+        	CONFIG_USB_SERIAL_PL2303=y
+        EOF
 
     - name: Add TTL Support
       shell: bash
@@ -487,7 +406,7 @@ runs:
         	CONFIG_FRAME_WARN=0
         	CONFIG_TRACEPOINTS=y
         EOF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_MAC80211
+        ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211
 
     - name: Save Build Metadata
       id: save_metadata
@@ -528,47 +447,7 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
-    
-    - name: Build Linux Headers .deb Package
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        cd "$COMMON_KERNEL_FOLDER"
-        OUT=out
-        KERNELRELEASE=$(make O="$OUT" -s kernelrelease)
-        HEADERS_DIR="$GITHUB_WORKSPACE/linux-headers-$KERNELRELEASE"
-        rm -rf "$HEADERS_DIR"
-        mkdir -p "$HEADERS_DIR/DEBIAN"
-        mkdir -p "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
-    
-        # Install headers
-        make O="$OUT" ARCH=arm64 headers_install INSTALL_HDR_PATH="$HEADERS_DIR/usr"
-    
-        # Copy .config and Module.symvers (if exists)
-        cp "$OUT/.config" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/.config"
-        if [ -f "$OUT/Module.symvers" ]; then
-          cp "$OUT/Module.symvers" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/Module.symvers"
-        else
-          echo "::warning::Module.symvers not found; headers package will lack symbol version info"
-        fi
-    
-        # Create control file
-        cat > "$HEADERS_DIR/DEBIAN/control" <<-EOF
-        Package: linux-headers-$KERNELRELEASE
-        Version: $KERNELRELEASE
-        Architecture: arm64
-        Maintainer: $BUILD_USER <$BUILD_USER@$BUILD_HOST>
-        Description: Linux kernel headers for $KERNELRELEASE
-         This package provides kernel header files for version $KERNELRELEASE,
-         useful for building external kernel modules like DKMS or manual compilations.
-        EOF
-    
-        # Build .deb
-        cd "$GITHUB_WORKSPACE"
-        dpkg-deb --build "linux-headers-$KERNELRELEASE"
-        mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
-        echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
+
 
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
@@ -651,6 +530,45 @@ runs:
           'CPTCFG_MT7925U=m' \
           'CPTCFG_MT7925E=m' \
           'CPTCFG_MT7996E=m' \
+          'CPTCFG_WLAN_VENDOR_REALTEK=y' \
+          'CPTCFG_RTLWIFI=m' \
+          'CPTCFG_RTLWIFI_DEBUG=y' \
+          'CPTCFG_RTL8192CE=m' \
+          'CPTCFG_RTL8192SE=m' \
+          'CPTCFG_RTL8192DE=m' \
+          'CPTCFG_RTL8723AE=m' \
+          'CPTCFG_RTL8723BE=m' \
+          'CPTCFG_RTL8188EE=m' \
+          'CPTCFG_RTL8192CU=m' \
+          'CPTCFG_RTL8192CC_COMMON=m' \
+          'CPTCFG_RTL8192EE=m' \
+          'CPTCFG_RTL8821AE=m' \
+          'CPTCFG_RTL8XXXU=m' \
+          'CPTCFG_RTL8XXXU_UNTESTED=y' \
+          'CPTCFG_RTL8180=m' \
+          'CPTCFG_RTL8187=m' \
+          'CPTCFG_RTW88=m' \
+          'CPTCFG_RTW88_CORE=m' \
+          'CPTCFG_RTW88_PCI=m' \
+          'CPTCFG_RTW88_USB=m' \
+          'CPTCFG_RTW88_8822B=m' \
+          'CPTCFG_RTW88_8822BU=m' \
+          'CPTCFG_RTW88_8822C=m' \
+          'CPTCFG_RTW88_8822CU=m' \
+          'CPTCFG_RTW88_8723D=m' \
+          'CPTCFG_RTW88_8723DU=m' \
+          'CPTCFG_RTW88_8821C=m' \
+          'CPTCFG_RTW88_8821CU=m' \
+          'CPTCFG_RTW88_8723X=m' \
+          'CPTCFG_RTW88_8723XU=m' \
+          'CPTCFG_RTW89=m' \
+          'CPTCFG_RTW89_CORE=m' \
+          'CPTCFG_RTW89_PCI=m' \
+          'CPTCFG_RTW89_8852A=m' \
+          'CPTCFG_RTW89_8852B=m' \
+          'CPTCFG_RTW89_8852C=m' \
+          'CPTCFG_RTW89_8851BE=m' \
+          'CPTCFG_RTW89_8922AE=m' \
           'CPTCFG_WLAN_VENDOR_RALINK=y' \
           'CPTCFG_RT2X00=m' \
           'CPTCFG_RT2X00_LIB=m' \
@@ -670,6 +588,7 @@ runs:
           'CPTCFG_RT2400PCI=m' \
           'CPTCFG_RT2500PCI=m' \
           'CPTCFG_RT2800PCI=m' \
+          'CPTCFG_RT2800PCI_RT33XX=y' \
           'CPTCFG_RT2800PCI_RT35XX=y' \
           'CPTCFG_RT2800PCI_RT53XX=y' \
           'CPTCFG_RT2800PCI_RT3290=y' \
@@ -723,7 +642,7 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
-
+        
     - name: Archive backports modules (flat)
       if: success()
       shell: bash
@@ -738,7 +657,6 @@ runs:
         cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
         echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
-        
     - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
@@ -764,11 +682,10 @@ runs:
         echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
 
     - name: Upload Artifacts
-      if: always()
       uses: actions/upload-artifact@v4
       with:
-       name: kernel-${{ env.CONFIG }}
-       path: |
-        ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-        ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
-        ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
+        name: kernel-${{ env.CONFIG }}
+        path: |
+          ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+          ${{ env.ARTIFACTS_FOLDER }}/backports-magisk.zip
+          ${{ github.workspace }}/backports-artifacts/
