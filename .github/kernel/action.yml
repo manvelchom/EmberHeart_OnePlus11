@@ -48,7 +48,7 @@ inputs:
   manifest:
     required: true
     type: string
-    default: OOS15
+    default: OOS16
   common_branch_or_commit:
     required: false
     type: string
@@ -902,7 +902,7 @@ runs:
         echo "::endgroup::"
 
     - name: Add Other configs
-      if: env.KERNEL_VER == '5.15'
+      if: env.KERNEL_VER == '5.10'
       shell: bash
       run: |
         set -euo pipefail
