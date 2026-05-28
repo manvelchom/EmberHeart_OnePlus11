@@ -534,11 +534,12 @@ runs:
           --enable CONFIG_RT2800USB_UNKNOWN
         
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_MT7601U \
-          --enable CONFIG_MT76_CORE \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
           --enable CONFIG_MT76x02_LIB \
           --enable CONFIG_MT76x02_USB \
-          --enable CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT76_CONNAC_LIB \
           --enable CONFIG_MT7603E \
           --enable CONFIG_MT76x2_COMMON \
           --enable CONFIG_MT76x0_COMMON \
@@ -548,12 +549,12 @@ runs:
           --enable CONFIG_MT76x0E \
           --enable CONFIG_MT7615_COMMON \
           --enable CONFIG_MT7663_USB_SDIO_COMMON \
-          --module CONFIG_MT7663U \
+          --enable CONFIG_MT7663U \
           --enable CONFIG_MT7663S \
           --enable CONFIG_MT7915E \
-          --enable CONFIC_MT7921_COMMON \
+          --module CONFIC_MT7921_COMMON \
           --enable CONFIG_MT7921E \
-          --enable CONFIG_MT7921U
+          --module CONFIG_MT7921U
         echo "Nethunter configs applied"
         echo "::endgroup::"
 
