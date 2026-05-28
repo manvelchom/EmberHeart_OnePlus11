@@ -125,7 +125,7 @@ runs:
           curl --fail --location --proto '=https' "$OP_MANIFEST" -o .repo/manifests/temp_manifest.xml
           "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         success=false
         for i in 1 2 3; do
@@ -200,7 +200,7 @@ runs:
     - name: Clone Dependencies
       shell: bash
       run: |
-        git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
+        git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.1.0
         git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
         git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
         git clone https://gitlab.com/simonpunk/susfs4ksu.git
