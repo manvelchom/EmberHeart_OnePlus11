@@ -264,7 +264,7 @@ runs:
 
 
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK \
+          --enable CONFIG_WLAN_VENDOR_RALINK \
 
 
         # ATH drivers
@@ -320,7 +320,7 @@ runs:
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
         
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'valod'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
