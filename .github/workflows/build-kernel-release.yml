@@ -117,9 +117,9 @@ on:
         required: true
         type: choice
         options:
-          - OP11
-          - OP11_LOS
-        default: OP11
+          - OP11R
+          - OP11R_LOS
+        default: OP11R
 
 jobs:
   set-op-model:
