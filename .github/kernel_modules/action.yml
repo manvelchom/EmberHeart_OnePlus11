@@ -5,181 +5,53 @@ permissions:
   actions: write
 
 inputs:
-  op_config_json:
-    description: 'JSON string containing full device config'
-    required: true
-    type: string
   optimize_level:
     required: false
     type: string
     default: O2  # Choices: O2 or O3
-  manifest:
+  lto:
+    required: false
+    type: string
+    default: Thin  # Choices: Thin or Full
+  evict_unused_ccache:
+    description: 'Do you want to evict unused ccache?'
     required: true
     type: string
-    default: OOS16
+    default: 'false'
+  compile_dlkm:
+    description: 'Do you want to compile dlkm and vendor boot?'
+    required: false
+    type: string
+    default: 'false'
+
+outputs:
+  vendor_boot_sha256:
+    value: ${{ steps.create_vendor_boot.outputs.vendor_boot_sha256 }}
+  vendor_dlkm_sha256:
+    value: ${{ steps.create_vendor_dlkm.outputs.vendor_dlkm_sha256 }}
 
 runs:
   using: composite
   steps:
-    - name: Parse op_config_json
+    - name: Clean environment for Mixed builds
       shell: bash
       run: |
         set -euo pipefail
-        echo '${{ inputs.op_config_json }}' > /tmp/config.json
-        jq -r 'to_entries[] | "\(.key | ascii_upcase)=\(.value)"' /tmp/config.json >> "$GITHUB_ENV"
-        echo "Parsed config:"
-        jq '.' /tmp/config.json
-    
-    - name: Set Manifest
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "MANIFEST=$MANIFEST_${{ inputs.manifest }}_MODULES" >> "$GITHUB_ENV"
+        rm -rf "$ARTIFACTS_DIR/" || true
+        rm -rf "$ARTIFACTS_DIR_DEBUG/" || true
+        rm -rf "$CCACHE_DIR/" || true
+        rm -rf "$LDCACHE_DIR/" || true
 
-    - name: Validate Inputs
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Validate inputs"
-        model="$MODEL"
-        soc="$SOC"
-        branch="$BRANCH"
-        manifest="$MANIFEST"
-        optimize='${{ inputs.optimize_level }}'
-    
-        # Non-empty checks
-        [[ -n "$model" ]] || { echo "Input 'model' cannot be empty"; exit 1; }
-        [[ -n "$soc" ]] || { echo "Input 'soc' cannot be empty"; exit 1; }
-        [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
-        [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
-    
-        # Basic format checks
-        # soc: allow letters, digits, underscores, dashes (e.g., sm8650)
-        if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
-          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"; exit 1
-        fi    
-        # branch: allow common ref patterns; spaces not allowed
-        if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"; exit 1
-        fi    
-        # manifest: either HTTPS URL ending with .xml, or a filename ending with .xml (no spaces)
-        if [[ "$manifest" == http*://* ]]; then
-          if ! [[ "$manifest" =~ ^https:// ]]; then
-            echo "Manifest URL must be HTTPS"; exit 1
-          fi
-          if ! [[ "$manifest" =~ \.xml($|\?) ]]; then
-            echo "Manifest URL should point to an XML file (.xml)"; exit 1
-          fi
-        else
-          if ! [[ "$manifest" =~ \.xml$ ]]; then
-            echo "Manifest filename must end with .xml"; exit 1
-          fi
-          if [[ "$manifest" =~ [[:space:]] ]]; then
-            echo "Manifest filename cannot contain spaces"; exit 1
-          fi
-        fi
-        # Optimize level validation
-        case "$optimize" in
-          O2|O3) ;;
-          *) echo "optimize_level must be O2 or O3; got '$optimize'"; exit 1 ;;
-        esac
-        echo "Input validation OK."
-        echo "::endgroup::"
-
-    - name: Aggressive cleanup
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Cleanup space"
-        # Remove .NET SDKs
-        sudo rm -rf /usr/share/dotnet
-        # Remove Swift toolchain
-        sudo rm -rf /usr/share/swift
-        # Remove Haskell (GHC)
-        sudo rm -rf /usr/local/.ghcup
-        # Remove Julia
-        sudo rm -rf /usr/local/julia*
-        # Remove Android SDKs
-        sudo rm -rf /usr/local/lib/android
-        # Remove Chromium (optional if not using for browser tests)
-        sudo rm -rf /usr/local/share/chromium
-        # Remove Microsoft/Edge and Google Chrome builds
-        sudo rm -rf /opt/microsoft /opt/google
-        # Remove Azure CLI
-        sudo rm -rf /opt/az
-        # Remove PowerShell
-        sudo rm -rf /usr/local/share/powershell
-        # Remove CodeQL and other toolcaches
-        sudo rm -rf /opt/hostedtoolcache
-        docker system prune -af || true
-        docker builder prune -af || true
-        df -h
-        echo "::endgroup::"
-
-    - name: Install Minimal Dependencies
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Install deps"
-        sudo apt-get -o Acquire::Retries=3 update -qq
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-          git curl ca-certificates build-essential clang lld flex bison \
-          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache
-        sudo apt-get clean
-        echo "::endgroup::"
-
-    - name: Setup Base Environment
-      shell: bash
-      run: |
-        set -euo pipefail
-        # Derive a unique build directory name
-        CONFIG="$MODEL"
-        echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
-        # Install repo tool if missing
-        REPO="/usr/local/bin/repo"
-        if [ ! -x "$REPO" ]; then
-          curl -s https://storage.googleapis.com/git-repo-downloads/repo -o "$REPO"
-          chmod +x "$REPO"
-        fi
-        echo "REPO=$REPO" >> "$GITHUB_ENV"
-
-    - name: Initialize and Sync Kernel Source
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "Creating folder for configuration: $CONFIG"
-        mkdir -p "$CONFIG"
-        cd "$CONFIG"
-        echo "Initializing and syncing kernel source..."
-        if [[ "$MANIFEST" == https://* ]]; then
-          mkdir -p .repo/manifests
-          curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-        else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-        fi
-        "$REPO" --version
-        success=false
-        for i in 1 2 3; do
-          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch \
-             -j"$(nproc --all)" --fail-fast; then
-            success=true
-            break
-          fi
-          echo "repo sync attempt $i failed; retrying..."
-          sleep 30
-        done
-        $success || { echo "repo sync failed after 3 attempts"; exit 1; }
+        mkdir -p "$ARTIFACTS_DIR"
+        mkdir -p "$ARTIFACTS_DIR_DEBUG"
+        mkdir -p "$CCACHE_DIR"
+        mkdir -p "$LDCACHE_DIR"
 
     - name: Get Kernel Version Info
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
-        mkdir -p "$ARTIFACTS_DIR"
-        cd "$CONFIG_DIR/kernel_platform/msm-kernel"
+        cd "$MSM"
         CONFIG_FILES=("build.config.common" "build.config.constants")
         BRANCH_LINE=""
         for f in "${CONFIG_FILES[@]}"; do
@@ -192,32 +64,102 @@ runs:
           echo "Error: No BRANCH= found"; exit 1
         fi
         BRANCH_VALUE="${BRANCH_LINE#*=}"
-        ANDROID_VERSION="${BRANCH_VALUE%-*}"
-        if [ -z "$ANDROID_VERSION" ]; then
+        ANDROID_RELEASE="${BRANCH_VALUE%-*}"
+        if [ -z "$ANDROID_RELEASE" ]; then
           echo "Could not parse android version from BRANCH=$BRANCH_VALUE"
           exit 1
         fi
-        VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
-        PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
-        SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
-        FULL_VERSION="$VERSION.$PATCHLEVEL.$SUBLEVEL"
+        KERNEL_VERSION=$(make kernelversion)
+        VERSION=$(echo $KERNEL_VERSION | cut -d'.' -f1)
+        PATCHLEVEL=$(echo $KERNEL_VERSION | cut -d'.' -f2)
+        SUBLEVEL=$(echo $KERNEL_VERSION | cut -d'.' -f3)
         cd "$ARTIFACTS_DIR"
-        echo "ANDROID_VER=$ANDROID_VERSION" >> "$GITHUB_ENV"
+        echo "ANDROID_RELEASE=$ANDROID_RELEASE" >> "$GITHUB_ENV"
         echo "KERNEL_VER=$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
-        echo "KERNEL_FULL_VER=$ANDROID_VERSION-$FULL_VERSION" >> "$GITHUB_ENV"
-        echo "SUSFS_KERNEL_BRANCH=gki-$ANDROID_VERSION-$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
+        echo "KERNEL_FULL_VER=$ANDROID_RELEASE-$KERNEL_VERSION" >> "$GITHUB_ENV"
+        echo "SUSFS_KERNEL_BRANCH=gki-$ANDROID_RELEASE-$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
 
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2.19
+        cd "$COMMON"
+        CONFIG_FILES=("build.config.common" "build.config.constants")
+        BRANCH_LINE=""
+        for f in "${CONFIG_FILES[@]}"; do
+          if [ -f "$f" ]; then
+            l=$(grep '^[[:space:]]*BRANCH=' "$f" || true)
+            if [ -n "$l" ]; then BRANCH_LINE="$l"; break; fi
+          fi
+        done
+        if [ -z "$BRANCH_LINE" ]; then
+          echo "Error: No BRANCH= found"; exit 1
+        fi
+        BRANCH_VALUE="${BRANCH_LINE#*=}"
+        ANDROID_RELEASE_COMMON="${BRANCH_VALUE%-*}"
+        if [ -z "$ANDROID_RELEASE" ]; then
+          echo "Could not parse android version from BRANCH=$BRANCH_VALUE"
+          exit 1
+        fi
+        KERNEL_VERSION_COMMON=$(make kernelversion)
+        echo "MIXED_KERNEL_VERSION=$ANDROID_RELEASE_COMMON-$KERNEL_VERSION_COMMON" >> "$GITHUB_ENV"
+
+    - name: Configure ccache
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        mkdir -p "$CCACHE_DIR"
+
+        # For mixed and monolithic builds
+        rm -rf "$CCACHE_DIR"
+
+        ccache -o compression=false
+        ccache -M 5G
+
+        # Use for ccache eviction
+        echo "ccache_start=$(date +%s)" >> "$GITHUB_ENV"
+
+    - name: Restore ccache
+      uses: actions/cache/restore@v5
       with:
-        key: ${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}
-        max-size: 5G
-        append-timestamp: false
-        create-symlink: true
-        job-summary: 'CCache stats'
-        evict-old-files: 'job'
+        path: ${{ env.CCACHE_DIR }}
+        key: ccache-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }}-${{ inputs.lto }}_LTO
+        restore-keys: |
+          ccache-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }}
+          ccache-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-
+
+    - name: Restore LTO cache
+      if: ${{ inputs.lto == 'Thin'}}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.LDCACHE_DIR }}
+        key: LTO-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }}
+        restore-keys: |
+          LTO-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }}
+          LTO-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-
+
+    - name: Restore files for Mixed builds
+      if: ${{ env.BUILD_TYPE == 'Modules Only' }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.KBUILD_MIXED_TREE_DIR }}
+        key: ${{ env.MODEL }}-MIXED-TREE-${{ inputs.optimize_level }}-${{ env.MIXED_KERNEL_VERSION }}
+
+    - name: Check for Mixed Tree artifacts
+      if: ${{ env.BUILD_TYPE == 'Modules Only' || env.BUILD_TYPE == 'Mixed Build' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [ -z "$(ls -A ${KBUILD_MIXED_TREE_DIR})" ]; then
+          echo "[ERROR] Mixed Tree artifacts not found!"
+          echo "[ERROR] Make sure mixed artifact for the latest kernel version of Common kernel is available in GitHub caches!"
+          echo "[ERROR] Stopping build"
+          exit 1
+        else
+          echo "[SUCCESS] MIXED TREE Artifacts found !"
+          echo "$(ls -A ${KBUILD_MIXED_TREE_DIR})"
+        fi
 
     - name: Clone kernel patches for msm kernel
+      if: ${{ env.BUILD_TYPE == 'Modules Only' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -228,40 +170,18 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        cd "$CONFIG/kernel_platform"
-        rm -f msm-kernel/android/abi_gki_protected_exports_* || true
+        rm -f $MSM/android/abi_gki_protected_exports_* || true
         df -h
-
-    - name: Merge
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT=out
-
-        cd "$MSM"
-
-        make ARCH=arm64 mrproper
-        mkdir -p "$OUT"
-
-        # Merge defconfig fragments from vendor/$SOC_GKI.config
-        ./scripts/kconfig/merge_config.sh -O "$OUT" -m arch/arm64/configs/gki_defconfig arch/arm64/configs/vendor/${SOC}_GKI.config
-
-        cp "$OUT/.config" arch/arm64/configs/gki_defconfig
-        rm "$OUT/.config"
 
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
         
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK \
+          --enable CONFIG_WLAN_VENDOR_REALTEK
 
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -280,8 +200,7 @@ runs:
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
           --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_SDIO \
-          --module CONFIG_MT76_LEDS \
+          --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
           --module CONFIG_MT76x02_LIB \
           --module CONFIG_MT76x02_USB \
@@ -289,316 +208,571 @@ runs:
           --module CONFIG_MT7603E \
           --module CONFIG_MT76x2_COMMON \
           --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT76x2U \
-          --module CONFIG_MT76x0U \
           --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7663_USB_SDIO_COMMON \
-          --module CONFIG_MT7663U \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E \
-          --module CONFIG_MT7921U
+          --module CONFIG_MT7921E
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
+          --enable CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
+    - name: Add my kernel patches to msm kernel
+      if: env.SOC == 'kalama' && !contains(env.MANIFEST_NAME, 'CUSTOM')
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Applying kernel patches to msm kernel from my repo..."
+        cd "$MSM"
 
-          
+        for patch_file in $KERNEL_PATCHES/kernel_patches/op11/msm/*.patch; do
+            echo "Applying patch: $patch_file"
+            patch -p1 < "$patch_file"
+        done
 
     - name: Add memkernel module
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
-        
-    - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'waipio'
+        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M mem-kernel
+
+    - name: Add rtw88 modules
       shell: bash
       run: |
         set -euo pipefail
-        echo "Applying kernel patches to msm kernel from my repo..."
-        cd "$CONFIG/kernel_platform/msm-kernel"
-    
-        shopt -s nullglob
-        PATCHES=(../../../my_patches/kernel_patches/op11/msm/*.patch)
-    
-        if [ ${#PATCHES[@]} -eq 0 ]; then
-          echo "[!] No OP11 msm patches found, skipping."
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtw88
+        git clone https://github.com/lwfinger/rtw88.git
+        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
+
+    - name: Add Build based configs
+      if: ${{ env.BUILD_TYPE != 'Monolithic Build' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Applying build based configs..."
+        cd "$MSM"
+
+        if [ "${{ inputs.lto }}" = "Thin" ]; then
+          ./scripts/config --file arch/arm64/configs/gki_defconfig \
+            --enable CONFIG_LTO_CLANG_THIN \
+            --enable CONFIG_LTO_CLANG
         else
-          for patch_file in "${PATCHES[@]}"; do
-            echo "Applying patch: $patch_file"
-            patch -p1 < "$patch_file"
-          done
+          ./scripts/config --file arch/arm64/configs/gki_defconfig \
+            --enable CONFIG_LTO_CLANG_FULL \
+            --enable CONFIG_LTO_CLANG
         fi
-    
-    - name: FIX vmscan scan_adjusted (waipio)
-      if: env.SOC == 'waipio'
-      shell: bash
-      run: |
-        set -euo pipefail
-        cd "$CONFIG/kernel_platform/msm-kernel/mm"
 
-        echo "[+] Cleaning old broken injections..."
-        sed -i '/bool scan_adjusted = false;/d' vmscan.c
-
-        echo "[+] Patching exact declaration block in shrink_lruvec()..."
-
-        perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
-
-        echo "[+] Verifying..."
-        grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
-        grep -n "scan_adjusted" vmscan.c | head -20
-
-    - name: FIX thermal kvzalloc kvfree (waipio)
-      if: env.SOC == 'waipio'
-      shell: bash
-      run: |
-        set -euo pipefail
-        export FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
-
-        echo "[+] Patching $FILE"
-
-        python3 - <<'PY'
-        import os
-        from pathlib import Path
-
-        path = Path(os.environ["FILE"])
-        text = path.read_text()
-
-        if "#include <linux/mm.h>" not in text and "#include <linux/slab.h>" in text:
-            text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>\n#include <linux/mm.h>", 1)
-
-        if "#define kvzalloc(size, flags)" not in text:
-            shim = (
-                "\n#ifndef kvzalloc\n"
-                "#define kvzalloc(size, flags) kzalloc((size), (flags))\n"
-                "#endif\n"
-                "#ifndef kvfree\n"
-                "#define kvfree(ptr) kfree((ptr))\n"
-                "#endif\n"
-            )
-
-            if "#include <linux/mm.h>" in text:
-                text = text.replace("#include <linux/mm.h>", "#include <linux/mm.h>" + shim, 1)
-            elif "#include <linux/slab.h>" in text:
-                text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>" + shim, 1)
-
-        path.write_text(text)
-        PY
-
-        echo "[+] Verifying thermal fix..."
-        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
-
-    
-    - name: FIX binder mmget_still_valid compat (waipio)
-      if: env.SOC == 'waipio'
-      shell: bash
-      run: |
-        set -euo pipefail
-        FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
-
-        echo "[+] Cleaning previous broken binder edits..."
-        sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
-        sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+5d' "$FILE"
-        sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
-
-        echo "[+] Ensuring correct mm header..."
-        grep -q '^#include <linux/sched/mm.h>$' "$FILE" || \
-          sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
-
-        echo "[+] Adding local compat shim only for mmget_still_valid()..."
-        grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
-          perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
-
-        echo "[+] Verifying binder fix..."
-        grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
-        grep -n 'mmget_still_valid' "$FILE" | head -20   
-        
-
-    - name: Detect Clang (toolchain for build)
-      shell: bash
-      run: |
-        set -euo pipefail
-        KP="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        CLANG_FOUND=false
-        for base in "$KP/prebuilts" "$KP/prebuilts-master"; do
-          [ -d "$base/clang/host/linux-x86" ] || continue
-          latest=$(ls -d "$base"/clang/host/linux-x86/clang-r*/ 2>/dev/null | sort -V | tail -n1 || true)
-          if [ -n "$latest" ] && [ -x "$latest/bin/clang" ]; then
-            CLANG_BIN="$latest/bin"
-            CLANG_FOUND=true
-          fi
-        done
-        if ! $CLANG_FOUND && command -v clang >/dev/null 2>&1; then
-          CLANG_BIN="$(dirname "$(command -v clang)")"
-          CLANG_FOUND=true
-          echo "Using system clang."
+        # Optimize level config and flags
+        if [ "${{ inputs.optimize_level }}" = "O3" ]; then
+          ./scripts/config --file arch/arm64/configs/gki_defconfig \
+            --disable CC_OPTIMIZE_FOR_PERFORMANCE \
+            --enable CC_OPTIMIZE_FOR_PERFORMANCE_O3
+        else
+          ./scripts/config --file arch/arm64/configs/gki_defconfig \
+           --enable CC_OPTIMIZE_FOR_PERFORMANCE \
+           --disable CC_OPTIMIZE_FOR_PERFORMANCE_O3
         fi
-        $CLANG_FOUND || { echo "No clang toolchain found"; exit 1; }
-        echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
-        CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
-        echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
-        echo "Detected Clang: $CLANG_VERSION"
+        echo "Build configs applied"
+        echo "::endgroup::"
 
-    - name: Build Kernel Modules
+    - name: Build Kernel Modules and Dtbs
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
 
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
+        if [ -d "$KERNEL_PLATFORM/build/build-tools/path" ]; then
+          export PATH="$KERNEL_PLATFORM/build/build-tools/path/linux-x86:$PATH"
+        else
+          export PATH="$KERNEL_PLATFORM/prebuilts/kernel-build-tools/linux-x86/bin:$PATH"
+        fi
 
-        MAKE_FLAGS=(
+        if [ "${{ inputs.lto }}" = "Thin" ]; then 
+          echo '#!/bin/bash' > ld-wrapper
+          echo 'ld.lld "$@" --thinlto-cache-dir=$LDCACHE_DIR --thinlto-jobs=$(nproc --all)' >> ld-wrapper
+          chmod +x ld-wrapper
+          LD="$(pwd)/ld-wrapper"
+        else
+          LD="ld.lld"
+        fi
+
+        if [ -d "$KERNEL_PLATFORM/build/build-tools/path" ]; then
+          DTC="$KERNEL_PLATFORM/build/kernel/build-tools/path/linux-x86/dtc"
+        else
+          DTC="$KERNEL_PLATFORM/prebuilts/kernel-build-tools/linux-x86/bin/dtc"
+        fi
+
+        MAKE_FLAGS+=(
           LLVM=1
           LLVM_IAS=1
           ARCH=arm64
-          SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=ccache\ clang
+          CROSS_COMPILE="aarch64-linux-gnu-"
+          LD="${LD}"
+          DTC="${DTC}"
+          DTC_FLAGS="-@"
+          HOSTCC="ccache clang"
+          HOSTCXX="ccache clang++"
+          CC="ccache clang"
         )
+
+        if [[ "$BUILD_TYPE" == "Mixed Build" || "$BUILD_TYPE" == "Modules Only" ]]; then
+          MAKE_FLAGS+=(
+            KBUILD_MIXED_TREE="$KBUILD_MIXED_TREE_DIR"
+          )
+        fi
 
         OUT=out
         INSTALL_MOD_PATH="$MSM/out"
+        INSTALL_DTBS_PATH="$MSM/$OUT/dtbs_staging"
+        export MSM_ARCH="$SOC"
+        DTB_TYPES="$MSM_ARCH-overlays-"
+
         mkdir -p "$OUT"
 
-        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+        # Merge defconfig fragments
+        CONFIGS=(
+          "gki_defconfig"
+        )
 
-        ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+        if [ -f "arch/arm64/configs/vendor/${SOC}_GKI.config" ]; then
+          CONFIGS+=("vendor/${SOC}_GKI.config")
+        fi
 
-        echo "Building in-tree kernel modules..."
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        if [ -f "arch/arm64/configs/vendor/oplus/${SOC}_GKI.config" ]; then
+          CONFIGS+=("vendor/oplus/${SOC}_GKI.config")
+        fi
+
+        if [ -f "arch/arm64/configs/vendor/debugfs.config" ]; then
+          CONFIGS+=("vendor/debugfs.config")
+        fi
+
+        make "${MAKE_FLAGS[@]}" O="$OUT" "${CONFIGS[@]}"
+
+        SECONDS=0
+
+        echo "Building kernel modules and dtbs..."
+        make "${MAKE_FLAGS[@]}" O=$OUT olddefconfig
+
+        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" modules dtbs
+
+        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_DTBS_PATH="$INSTALL_DTBS_PATH" DTB_TYPES="$DTB_TYPES" dtbs_install
+
+        echo "duration=$SECONDS" >> "$GITHUB_ENV"
 
         cd "$KERNEL_PLATFORM"
 
-        mkdir -p "$KERNEL_PLATFORM/oplus/config"
-        touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
+        # Exports for external kernel modules
+        export BOARD_PLATFORM=kalama
+        export TARGET_BOARD_PLATFORM=kalama
+        export ROOT_DIR=$KERNEL_PLATFORM
 
-        mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
-        printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
+        # LOS sources expect out to be inside kernel_platform so we set out_dir as . 
+        # because our actual out dir is inside common directory
+        if [[ "$BUILD_TYPE" == "Monolithic Build" ]]; then
+          export OUT_DIR=$MSM
+        fi
 
-        MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
+        if [[ "$BUILD_TYPE" == "Mixed Build" || "$BUILD_TYPE" == "Modules Only" ]]; then
+          export KERNEL_DIR=msm-kernel
+        else
+          export KERNEL_DIR=common
+        fi
+        export MODNAME=audio_dlkm
+        export OPLUS_ARCH_EXTENDS=y
+        export KERNEL_BUILD=0
 
-        mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
-
-        OPLUS_FLAGS=(
-          CHIPSET_COMPANY=QCOM
-          OPLUS_VND_BUILD_PLATFORM="$SOC"
+        MAKE_FLAGS+=(
+          KERNEL_SRC="$ROOT_DIR/$KERNEL_DIR"
         )
 
-        EXT_QCOM=(
-          ../vendor/qcom/opensource/mmrm-driver
-          ../vendor/qcom/opensource/mm-drivers/hw_fence
-          ../vendor/qcom/opensource/mm-drivers/sync_fence
-          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
-          ../vendor/qcom/opensource/securemsm-kernel
-          ../vendor/qcom/opensource/display-drivers/msm
-          ../vendor/qcom/opensource/audio-kernel
-          ../vendor/qcom/opensource/camera-kernel
-          ../vendor/oplus/kernel/explorer
-          ../vendor/qcom/opensource/video-driver
-          ../vendor/qcom/opensource/graphics-kernel
-          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
-          ../vendor/qcom/opensource/datarmnet/core
-          ../vendor/qcom/opensource/datarmnet-ext/aps
-          ../vendor/qcom/opensource/datarmnet-ext/offload
-          ../vendor/qcom/opensource/datarmnet-ext/shs
-          ../vendor/qcom/opensource/datarmnet-ext/sch
-          ../vendor/qcom/opensource/datarmnet-ext/perf
-          ../vendor/qcom/opensource/datarmnet-ext/perf_tether
-          ../vendor/qcom/opensource/datarmnet-ext/wlan
-          ../vendor/qcom/opensource/eva-kernel
-          ../vendor/qcom/opensource/wlan/platform
-          ../vendor/qcom/opensource/bt-kernel
-          ../vendor/nxp/opensource/driver
-          ../vendor/st/opensource/driver
-          ../vendor/st/opensource/eSE-driver
-          ../vendor/qcom/opensource/wlan/qcacld-3.0
+        if [ -f "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" ]; then
+          # OPLUS ext modules list
+          EXT_OPLUS=($(cat "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"))
+
+          OPLUS_FLAGS+=(
+              CHIPSET_COMPANY=QCOM
+              OPLUS_VND_BUILD_PLATFORM="$SOC"
+          )
+
+          echo "Compiling vendor modules (oplus)"
+          SECONDS=0
+
+          # OPLUS ext modules
+          for MODULE in "${EXT_OPLUS[@]}"; do
+              make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"
+              make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
+          done
+
+          echo "duration_oplus_ext=$SECONDS" >> "$GITHUB_ENV"
+        else
+          echo "[INFO] OPLUS modules not found. skipping"
+          echo "duration_oplus_ext=0" >> "$GITHUB_ENV"
+        fi
+
+        # QCOM ext modules
+        EXT_QCOM+=(
+            ../vendor/qcom/opensource/mmrm-driver
+            ../vendor/qcom/opensource/mm-drivers/hw_fence
+            ../vendor/qcom/opensource/mm-drivers/sync_fence
+            ../vendor/qcom/opensource/mm-drivers/msm_ext_display
+            ../vendor/qcom/opensource/securemsm-kernel
+            ../vendor/qcom/opensource/display-drivers/msm
+            ../vendor/qcom/opensource/audio-kernel
+            ../vendor/qcom/opensource/camera-kernel
+            ../vendor/oplus/kernel/explorer
+            ../vendor/qcom/opensource/video-driver
+            ../vendor/qcom/opensource/graphics-kernel
+            ../vendor/qcom/opensource/dataipa/drivers/platform/msm
+            ../vendor/qcom/opensource/datarmnet/core
+            ../vendor/qcom/opensource/datarmnet-ext/aps
+            ../vendor/qcom/opensource/datarmnet-ext/offload
+            ../vendor/qcom/opensource/datarmnet-ext/shs
+            ../vendor/qcom/opensource/datarmnet-ext/sch
+            ../vendor/qcom/opensource/datarmnet-ext/perf
+            ../vendor/qcom/opensource/datarmnet-ext/perf_tether
+            ../vendor/qcom/opensource/datarmnet-ext/wlan
+            ../vendor/qcom/opensource/eva-kernel
+            ../vendor/qcom/opensource/wlan/platform
+            ../vendor/qcom/opensource/bt-kernel
+            ../vendor/nxp/opensource/driver
+            ../vendor/st/opensource/driver
+            ../vendor/st/opensource/eSE-driver
+            ../vendor/qcom/opensource/wlan/qcacld-3.0/.${QCACLD_DEV_NAME}
         )
 
-        MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
+        if [[ "$BUILD_TYPE" == "Mixed Build" || "$BUILD_TYPE" == "Modules Only" ]]; then
+          export KBUILD_EXTRA_SYMBOLS=""
+        fi
 
-        build_external_module() {
-          local module="$1"
-          local extra_syms=()
-
-          echo "==== Processing module: $module ===="
-
-          if [ ! -d "$module" ]; then
-            echo "Skipping missing module dir: $module"
-            return 0
-          fi
-
-          if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
-            echo "Skipping module without Makefile/Kbuild: $module"
-            return 0
-          fi
-
-          if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
-            extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
-            echo "Using mmrm Module.symvers for $module"
-          fi
-
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" modules; then
-            echo "Build failed, skipping module: $module"
-            return 0
-          fi
-
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
-            echo "Install failed, skipping module: $module"
-            return 0
-          fi
-        }
-
-        for MODULE in "${EXT_OPLUS[@]}"; do
-          [ -n "$MODULE" ] || continue
-          build_external_module "$MODULE"
-        done
+        echo "Compiling vendor modules (qcom)"
+        SECONDS=0
 
         for MODULE in "${EXT_QCOM[@]}"; do
-          build_external_module "$MODULE"
+            if [ ! -d "$MODULE" ]; then
+              echo "[WARNING] The following module path does not exist : $MODULE"
+              continue
+            fi
+
+            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"
+            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+            
+            if [[ "$BUILD_TYPE" == "Mixed Build" || "$BUILD_TYPE" == "Modules Only" ]]; then
+              export KBUILD_EXTRA_SYMBOLS=$(find "$KERNEL_PLATFORM/vendor" -name "Module.symvers" | tr '\n' ' ')
+            fi
         done
 
-    - name: Add rtl88xxau modules
+        find "${INSTALL_MOD_PATH}" -name "${QCACLD_DEV_NAME}.ko" -execdir mv -i -- "{}" "qca_cld3_${QCACLD_DEV_NAME}.ko" \;
+
+        echo "duration_qcom_ext=$SECONDS" >> "$GITHUB_ENV"
+
+        echo "Compiling vendor devicetree overlays"
+        SECONDS=0
+
+        for PROJECT in $(cd "$CONFIG" && find -L vendor/ -maxdepth 4 -type d -name "*-devicetree"); do
+          if [ ! -e "../$PROJECT/Makefile" ]; then
+            echo "$PROJECT does not have expected build configuration files, skipping..."
+            continue
+          fi
+          make -C "../$PROJECT" M="../../$PROJECT" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"
+        done
+
+        echo "duration_dtb_ext=$SECONDS" >> "$GITHUB_ENV"
+
+        # To be used for preparing modules.order in create_vendor_dlkm step
+        EXT_MODULES=("${EXT_OPLUS[@]#../}" "${EXT_QCOM[@]#../}") >> "$GITHUB_ENV"
+
+    - name: Create dtb.img
+      id: create_dtb
+      if: ${{ inputs.compile_dlkm == 'true' }}
       shell: bash
       run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        git clone https://github.com/docdry0001/rtl8812au.git
-        cd rtlwifi
-        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
-        sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
+        OUT="$MSM/out"
+        PREBUILTS="https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/prebuilts/$MODEL"
+        if curl -fsSL "$PREBUILTS/vendor_boot/dtb" -o "$OUT/dtb.img"; then
+          echo "Using dtb from prebuilts."
+        else
+          echo "WARNING: dtb not found from prebuilts"
+          DTB_FILE_LIST=$(find "$OUT/dtbs_staging" -name "*.dtb" | sort)
+          cat $DTB_FILE_LIST > "$OUT/dtb.img"
+        fi
+
+        cp -r "$OUT/dtbs_staging/" "$ARTIFACTS_DIR_DEBUG"
+
+    - name: Create system_dlkm Image
+      if: ${{ inputs.compile_dlkm == 'true'  && env.BUILD_TYPE == 'Monolithic Build' }}
+      id: create_system_dlkm
+      shell: bash
+      run: |
+        PREBUILTS="https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/prebuilts/$MODEL"
+        OUT="$COMMON/out"
+        UNAME=$(ls "$OUT/lib/modules/")
+        DLKM_STAGING_DIR="$OUT/system_dlkm_staging"
+        DLKM_STAGING_ROOT="$DLKM_STAGING_DIR/lib/modules/$UNAME"
+
+        if [ -d "$KERNEL_PLATFORM/build/build-tools/path" ]; then
+          export PATH="$KERNEL_PLATFORM/build/build-tools/path/linux-x86:$PATH"
+        else
+          export PATH="$KERNEL_PLATFORM/prebuilts/kernel-build-tools/linux-x86/bin:$PATH"
+        fi
+
+        # Don't create DLKM_STAGING_DIR and copy the OUT/lib folder cause it has many unnecessary files
+        # Instead create lib and copy modules folder from OUT/lib/modules to DLKM_STAGING_DIR/lib/
+        mkdir -p "$DLKM_STAGING_DIR/lib"
         
+        # copy modules and other files generated by depmod to staging dir
+        cp -a "$OUT/lib/modules" "$DLKM_STAGING_DIR/lib/"
+        cp "$DLKM_STAGING_ROOT/modules.order" "$DLKM_STAGING_ROOT/modules.load"
+        cp "$DLKM_STAGING_ROOT/modules.load" "$OUT/system_dlkm.modules.load"
+
+        # remove unnecessary files from DLKM_STAGING_ROOT
+        cd "$DLKM_STAGING_ROOT"
+        rm build source modules.builtin.modinfo
+
+        # add other files found in stock system_dlkm
+        cd "$DLKM_STAGING_DIR"
+        mkdir -p etc
+        cd etc
+        curl -sL -o build.prop "$PREBUILTS/system_dlkm/build.prop"
+        touch fs_config_dirs fs_config_files
+
+        cd "$OUT"
+        # Create temporary prop file for system_dlkm image
+        system_dlkm_props_file="$(mktemp)"
+        echo -e "system_dlkm_fs_type=ext4\n" >> ${system_dlkm_props_file}
+        echo -e "use_dynamic_partition_size=true\n" >> ${system_dlkm_props_file}
+        echo -e "ext_mkuserimg=mkuserimg_mke2fs\n" >> ${system_dlkm_props_file}
+        echo -e "ext4_share_dup_blocks=true\n" >> ${system_dlkm_props_file}
+
+        build_image "$DLKM_STAGING_DIR" "${system_dlkm_props_file}" "$OUT/system_dlkm.img" /dev/null
+
+        avbtool add_hashtree_footer \
+            --partition_name system_dlkm \
+            --image "$OUT/system_dlkm.img"
+
+        SYSTEM_DLKM_SHA256=$(sha256sum "$OUT/system_dlkm.img" | cut -d' ' -f1)
+        echo "system_dlkm_sha256=${SYSTEM_DLKM_SHA256:-ERROR}" >> "$GITHUB_OUTPUT"
+
+        cp "$OUT/system_dlkm.img" "$ARTIFACTS_DIR"
+        cp "$OUT/system_dlkm.modules.load" "$ARTIFACTS_DIR"
+        cp "$OUT/system_dlkm.modules.load" "$ARTIFACTS_DIR_DEBUG"
+
+    - name: Create vendor_boot
+      id: create_vendor_boot
+      if: ${{ inputs.compile_dlkm == 'true' }}
+      shell: bash
+      run: |
+        PREBUILTS="https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/prebuilts/$MODEL"
+        MKBOOTIMG="$KERNEL_PLATFORM/tools/mkbootimg/mkbootimg.py"
+        OUT="$MSM/out"
+        UNAME=$(ls "$OUT/lib/modules/")
+        MODULES_STAGING_ROOT="$OUT/lib/modules/$UNAME"
+        VENDOR_BOOT_STAGING_DIR="$OUT/vendor_boot_staging"
+        RAMDISK_STAGING_DIR="$VENDOR_BOOT_STAGING_DIR/ramdisk"
+        RAMDISK_STAGING_MODULES="$RAMDISK_STAGING_DIR/lib/modules"
+        DEPMOD_DIR="$RAMDISK_STAGING_DIR"
+        # After depmod delete this dir since ramdisk is flattened
+        DEPMOD_DIR_ROOT="$VENDOR_BOOT_STAGING_DIR/ramdisk/lib/modules/$UNAME"
+
+        if [ -d "$KERNEL_PLATFORM/build/build-tools/path" ]; then
+          export PATH="$KERNEL_PLATFORM/build/build-tools/path/linux-x86:$PATH"
+        else
+          export PATH="$KERNEL_PLATFORM/prebuilts/kernel-build-tools/linux-x86/bin:$PATH"
+        fi
+
+        # Create folder of highest depth amongst all
+        mkdir -p "$DEPMOD_DIR_ROOT"
+
+        # add prebuilt files
+        cd "$RAMDISK_STAGING_MODULES"
+        curl -sL -o modules.load "$PREBUILTS/vendor_boot/vendor_ramdisk/modules.load"
+        curl -sL -o modules.load.recovery "$PREBUILTS/vendor_boot/vendor_ramdisk/modules.load.recovery"
+        curl -sL -o modules.blocklist "$PREBUILTS/vendor_boot/vendor_ramdisk/modules.blocklist"
+
+        ramdisk_modules="$(mktemp)"
+        curl -sL "$PREBUILTS/vendor_boot/vendor_ramdisk/ramdisk_modules.txt" >> "$ramdisk_modules"
+        # copy modules to DEPMOD_DIR_ROOT
+        # NOTE: do depmod from DEPMOD_DIR
+        cd "$MODULES_STAGING_ROOT"
+        missing_modules=$(mktemp)
+        while IFS= read -r module || [ -n "$module" ]; do
+          module_path=$(find . -name "$module" -print -quit)
+          if [ -n "$module_path" ]; then
+            cp "$module_path" "$DEPMOD_DIR_ROOT"
+          else
+            if curl -fsSL "$PREBUILTS/proprietary/$module" -o "$DEPMOD_DIR_ROOT/$module"; then
+              echo "Using $module from prebuilts."
+            else
+              echo "WARNING: $module not found"
+              echo "$module" >> "$missing_modules"
+            fi
+          fi
+        done < "$ramdisk_modules"
+
+        # Apply depmod and copy required artifacts
+        cd "$DEPMOD_DIR"
+        depmod -F "$KBUILD_MIXED_TREE_DIR/System.map" -b . "$UNAME"
+        cp -p "$DEPMOD_DIR_ROOT"/modules.{alias,dep,softdep} "$RAMDISK_STAGING_MODULES"
+
+        # Copy modules from depmod dir and delete the dir since vendor dlkm is flattened
+        find "$DEPMOD_DIR_ROOT" -type f -name '*.ko' -exec cp {} "$RAMDISK_STAGING_MODULES/" \;
+        rm -rf "$DEPMOD_DIR_ROOT"
+
+        # Add additional files that will go into ramdisk
+        mkdir -p "$RAMDISK_STAGING_DIR/first_stage_ramdisk"
+        cd "$RAMDISK_STAGING_DIR/first_stage_ramdisk"
+        curl -sL -o fstab.qcom "$PREBUILTS/vendor_boot/vendor_ramdisk/first_stage_ramdisk/fstab.qcom"
+
+        cd "$VENDOR_BOOT_STAGING_DIR"
+
+         # Create cpio compressed ramdisk using mkbootfs; use cpio like cyberknight777 did in his YAKB??
+        mkbootfs "$RAMDISK_STAGING_DIR" > "$OUT/ramdisk.cpio"
+
+        curl -sL -o "$OUT/vendor-bootconfig.img" "$PREBUILTS/vendor_boot/bootconfig"
+
+        # Note : prebuilt vendor cmdline already contains bootconfig , so no need to append it!
+        VENDOR_CMDLINE=$(curl -sL "$PREBUILTS/vendor_boot/cmdline.txt")
+
+        # add fstab and create cpio compressed archive
+        MKBOOTIMG_ARGS=(
+          "--header_version" "4"
+          "--pagesize" "4096"
+          "--vendor_cmdline" "$VENDOR_CMDLINE"
+          "--dtb" "$OUT/dtb.img"
+          "--vendor_bootconfig" "$OUT/vendor-bootconfig.img"
+          "--vendor_boot" "$OUT/vendor_boot.img"
+          "--vendor_ramdisk" "$OUT/ramdisk.cpio"
+        )
+
+        echo "Creating boot image"
+        "$MKBOOTIMG" "${MKBOOTIMG_ARGS[@]}"
+
+        echo "Signing boot image"
+
+        avbtool add_hash_footer \
+          --partition_name boot \
+          --partition_size "$VENDOR_BOOT_PARTITION_SIZE" \
+          --image "$OUT/vendor_boot.img" \
+          --algorithm "SHA256_RSA4096" \
+          --key "$KERNEL_PLATFORM/tools/mkbootimg/gki/testdata/testkey_rsa4096.pem"
+
+        VENDOR_BOOT_SHA256=$(sha256sum "$OUT/vendor_boot.img" | cut -d' ' -f1)
+        echo "vendor_boot_sha256=${VENDOR_BOOT_SHA256:-ERROR}" >> "$GITHUB_OUTPUT"
+
+        cp "$RAMDISK_STAGING_MODULES/modules.load" "$OUT/vendor_boot.modules.load"
+        cp "$RAMDISK_STAGING_MODULES/modules.load.recovery" "$OUT/vendor_boot.modules.load.recovery"
+
+        cp "$OUT/vendor_boot.img" "$ARTIFACTS_DIR"
+        cp "$OUT/vendor_boot.modules.load" "$ARTIFACTS_DIR"
+        cp "$OUT/vendor_boot.modules.load" "$ARTIFACTS_DIR_DEBUG"
+        cp "$OUT/vendor_boot.modules.load.recovery" "$ARTIFACTS_DIR"
+        cp "$OUT/vendor_boot.modules.load.recovery" "$ARTIFACTS_DIR_DEBUG"
+        cp "$OUT/ramdisk.cpio" "$ARTIFACTS_DIR_DEBUG"
+        cp "$OUT/vendor-bootconfig.img" "ARTIFACTS_DIR_DEBUG"
+        cp "$missing_modules" "$ARTIFACTS_DIR_DEBUG/vendor_boot.modules.load.missing"
+
+    - name: Create vendor_dlkm
+      id: create_vendor_dlkm
+      if: ${{ inputs.compile_dlkm == 'true' }}
+      shell: bash
+      run: |
+        PREBUILTS="https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/prebuilts/$MODEL"
+        OUT="$MSM/out"
+        UNAME=$(ls "$OUT/lib/modules/")
+        MODULES_STAGING_ROOT="$OUT/lib/modules/$UNAME"
+        DLKM_STAGING_DIR="$OUT/vendor_dlkm_staging"
+        DLKM_STAGING_ROOT="$DLKM_STAGING_DIR/lib/modules"
+        DEPMOD_DIR="$DLKM_STAGING_DIR"
+        # After depmod delete this dir since vendor_dlkm is flattened
+        DEPMOD_DIR_ROOT="$DLKM_STAGING_DIR/lib/modules/$UNAME"
+
+        if [ -d "$KERNEL_PLATFORM/build/build-tools/path" ]; then
+          export PATH="$KERNEL_PLATFORM/build/build-tools/path/linux-x86:$PATH"
+        else
+          export PATH="$KERNEL_PLATFORM/prebuilts/kernel-build-tools/linux-x86/bin:$PATH"
+        fi
+
+        # Create folder of highest depth amongst all
+        mkdir -p "$DEPMOD_DIR_ROOT"
+
+        # add prebuilt files
+        cd "$DLKM_STAGING_ROOT"
+        curl -sL -o modules.load "$PREBUILTS/vendor_dlkm/modules.load"
+        curl -sL "$PREBUILTS/vendor_dlkm/modules.load.extra" >> modules.load
+        curl -sL -o modules.blocklist "$PREBUILTS/vendor_dlkm/modules.blocklist"
+        curl -sL -o system_dlkm.modules.blocklist "$PREBUILTS/vendor_dlkm/system_dlkm.modules.blocklist"
+
+        # copy modules to DEPMOD_DIR_ROOT
+        # NOTE: do depmod from DEPMOD_DIR
+        cd "$MODULES_STAGING_ROOT"
+        missing_modules=$(mktemp)
+        while IFS= read -r module || [ -n "$module" ]; do
+          module_path=$(find . -name "$module" -print -quit)
+          if [ -n "$module_path" ]; then
+            cp "$module_path" "$DEPMOD_DIR_ROOT"
+          else
+            if curl -fsSL "$PREBUILTS/proprietary/$module" -o "$DEPMOD_DIR_ROOT/$module"; then
+              echo "Using $module from prebuilts."
+            else
+              echo "WARNING: $module not found"
+              echo "$module" >> "$missing_modules"
+            fi
+          fi
+        done < "$DLKM_STAGING_ROOT/modules.load"
+
+        # NOTE: modules.order is not present in stock_dlkm, this modules.order is strictly for debugging purposes only !
+        modules_order="$(mktemp)"
+        cat "$MODULES_STAGING_ROOT/modules.order" >> "$modules_order"
+        # Append modules.order in the sequence we compiled them
+        for MODULE in "${EXT_MODULES[@]}"; do
+          find "$MODULES_STAGING_ROOT/extra/$MODULE" -type f -name 'modules.order*' -exec cat {} >> "$modules_order" \;
+        done
+        sed -i 's/.*\///g' "$modules_order"
+        cp "$modules_order" "$ARTIFACTS_DIR_DEBUG/modules.order"
+
+        # Apply depmod and copy required artifacts
+        cd "$DEPMOD_DIR"
+        depmod -F "$KBUILD_MIXED_TREE_DIR/System.map" -b . "$UNAME"
+        cp -p "$DEPMOD_DIR_ROOT"/modules.{alias,dep,softdep} "$DLKM_STAGING_ROOT"
+
+        # Copy modules from depmod dir and delete the dir since vendor dlkm is flattened
+        find "$DEPMOD_DIR_ROOT" -type f -name '*.ko' -exec cp {} "$DLKM_STAGING_ROOT/" \;
+        rm -rf "$DEPMOD_DIR_ROOT"
+
+        cp "$DLKM_STAGING_ROOT/modules.load" "$OUT/vendor_dlkm.modules.load"
+
+        # add other files found in stock vendor_dlkm
+        cd "$DLKM_STAGING_DIR"
+        mkdir -p etc
+        cd etc
+        curl -sL -o build.prop "$PREBUILTS/vendor_dlkm/build.prop"
+        touch fs_config_dirs fs_config_files
+
+        cd "$OUT"
+        # Create temporary prop file for vendor_dlkm image
+        vendor_dlkm_props_file="$(mktemp)"
+        echo -e "vendor_dlkm_fs_type=ext4\n" >> ${vendor_dlkm_props_file}
+        echo -e "use_dynamic_partition_size=true\n" >> ${vendor_dlkm_props_file}
+        echo -e "ext_mkuserimg=mkuserimg_mke2fs\n" >> ${vendor_dlkm_props_file}
+        echo -e "ext4_share_dup_blocks=true\n" >> ${vendor_dlkm_props_file}
+
+        build_image "$DLKM_STAGING_DIR" "${vendor_dlkm_props_file}" "$OUT/vendor_dlkm.img" /dev/null
+
+        VENDOR_DLKM_SHA256=$(sha256sum "$OUT/vendor_dlkm.img" | cut -d' ' -f1)
+        echo "vendor_dlkm_sha256=${VENDOR_DLKM_SHA256:-ERROR}" >> "$GITHUB_OUTPUT"
+
+        cp "$OUT/vendor_dlkm.img" "$ARTIFACTS_DIR"
+        cp "$OUT/vendor_dlkm.modules.load" "$ARTIFACTS_DIR"
+        cp "$OUT/vendor_dlkm.modules.load" "$ARTIFACTS_DIR_DEBUG"
+        cp "$missing_modules" "$ARTIFACTS_DIR_DEBUG/vendor_dlkm.modules.load.missing"
 
     - name: Filter modules
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
         UNAME=$(ls "$OUT/lib/modules/")
 
@@ -611,7 +785,7 @@ runs:
         echo "Removing unnecessary modules..."
         cd modules
         # Download default module list
-        curl -L -o default_modules.txt https://raw.githubusercontent.com/docdry0001/kernel_patches/refs/heads/main/default_modules.txt
+        curl -sL -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
         # Remove modules in the default list
 
         while IFS= read -r module; do
@@ -628,41 +802,118 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
         MODULES_SRC="$OUT/modules"
-        MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
-        mkdir -p "$CONFIG_DIR/artifacts"
+        MODULES_ZIP="$CONFIG/artifacts/kernel_modules_${{ env.MODEL }}.zip"
+        mkdir -p "$CONFIG/artifacts"
         find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
         echo "Packaged kernel modules to $MODULES_ZIP"
+
+    - name: Format build time
+      id: build_time
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [ "$duration" -ge 60 ]; then
+          duration="$((duration / 60))m $((duration % 60))s"
+        else
+          duration="${duration}s"
+        fi
+
+        if [ "$duration_oplus_ext" -ge 60 ]; then
+          duration_oplus_ext="$((duration_oplus_ext / 60))m $((duration_oplus_ext % 60))s"
+        else
+          duration_oplus_ext="${duration_oplus_ext}s"
+        fi
+
+        if [ "$duration_qcom_ext" -ge 60 ]; then
+          duration_qcom_ext="$((duration_qcom_ext / 60))m $((duration_qcom_ext % 60))s"
+        else
+          duration_qcom_ext="${duration_qcom_ext}s"
+        fi
+
+        if [ "$duration_dtb_ext" -ge 60 ]; then
+          duration_dtb_ext="$((duration_dtb_ext / 60))m $((duration_dtb_ext % 60))s"
+        else
+          duration_dtb_ext="${duration_dtb_ext}s"
+        fi
+
+        echo "duration=$duration" >> "$GITHUB_OUTPUT"
+        echo "duration_oplus_ext=$duration_oplus_ext" >> "$GITHUB_OUTPUT"
+        echo "duration_qcom_ext=$duration_qcom_ext" >> "$GITHUB_OUTPUT"
+        echo "duration_dtb_ext=$duration_dtb_ext" >> "$GITHUB_OUTPUT"
 
     - name: Final Build Summary
       shell: bash
       run: |
         set -euo pipefail
         {
-          echo "CCache Statistics :"
-          echo "$(/usr/bin/ccache -s)"
-        } | tee summary.txt
-        {
           echo "### Kernel Modules Build Summary"
+          echo "----"
           echo ""
-          echo "CCache Statistics :"
-          echo "$(ccache -s -v)"
+          echo "> [!NOTE]"
+          echo "> Model: ${{ env.MODEL }}"
+          echo ""
+          echo "> [!IMPORTANT]"
+          echo "> - Vendor boot SHA256: ${{ steps.create_vendor_boot.outputs.vendor_boot_sha256 }}"
+          echo "> - Vendor dlkm SHA256: ${{ steps.create_vendor_dlkm.outputs.vendor_dlkm_sha256 }}"
+          echo ""
+          echo "> [!NOTE]"
+          echo "> - Modules build time: ${{ steps.build_time.outputs.duration }}"
+          echo "> - Oplus external modules build time: ${{ steps.build_time.outputs.duration_oplus_ext }}"
+          echo "> - Qcom external modules build time: ${{ steps.build_time.outputs.duration_qcom_ext }}"
+          echo "> - External dtbo build time: ${{ steps.build_time.outputs.duration_dtb_ext }}"
+          echo ""
+          echo "> [!IMPORTANT]"
+          echo "> ## CCache Statistics :"
+          echo "> $(ccache -s -v )"
         } >> "$GITHUB_STEP_SUMMARY"
 
-    - name: Cleanup old ccache
+    - name: Cleanup old ccache & upload ccache log
       shell: bash
       run: |
         set -euo pipefail
-        echo "Deleting old ccache..."
-        gh cache delete ccache-${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}- || true
+
+        echo "[DEBUG] Uploading ccache logs"
+        cp "$CCACHE_LOGFILE" "$ARTIFACTS_DIR_DEBUG"
+
+        # Evict untouched ccache contents
+        ccache_end=$(date +%s)
+        ccache_delta=$(( ccache_end - ccache_start ))
+        if [[ "${{ inputs.evict_unused_ccache }}" == "true" ]]; then
+          echo "[DEBUG] Deleting ccache contents older than $ccache_delta seconds"
+          ccache --evict-older-than "${ccache_delta}s"
+        fi
+
+        echo "[WARNING] Deleting old LTO cache"
+        gh cache delete LTO-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }} || true
+
+        echo "[WARNING] Deleting old ccache"
+        gh cache delete ccache-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }} || true
+
+    - name: Save ccache
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ccache-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }}-${{ inputs.lto }}_LTO
+
+    - name: Save LTO cache
+      if: ${{ inputs.lto == 'Thin'}}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.LDCACHE_DIR }}
+        key: LTO-${{ env.MODEL }}-modules-${{ inputs.optimize_level }}-${{ env.KERNEL_FULL_VER }}
 
     - name: Upload Kernel Modules zip
       if: success() && steps.create_zip.conclusion == 'success'
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-modules-${{ env.CONFIG }}
+        name: kernel-modules-${{ env.MODEL }}
         path: ${{ env.CONFIG }}/artifacts/
+
+    - name: Upload Debug zip
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-msm-${{ env.MODEL }}
+        path: ${{ env.CONFIG }}/debug/artifacts/
