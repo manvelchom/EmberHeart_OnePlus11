@@ -16,6 +16,16 @@ on:
           - Pre-release
           - Release
         default: none
+      build_target:
+        description: 'What do you want to build?'
+        required: true
+        type: choice
+        options:
+          - Kernel Only
+          - Modules Only
+          - Mixed Build
+          - Monolithic Build
+        default: Mixed Build
       manifest:
         description: 'Select manifest'
         required: true
@@ -23,10 +33,31 @@ on:
         options:
           - OOS14
           - OOS15
-          - FAST_BUILD_OOS15
           - OOS16
           - OOS16_CUSTOM
-        default: OOS16
+          - LOS_22_2
+          - LOS_23_2
+        default: OOS16_CUSTOM
+      evict_unused_ccache:
+        description: 'Do you want to use evict unused ccache?'
+        required: true
+        type: boolean
+        default: true
+      use_custom_repo_parser:
+        description: 'Do you want to use custom repo parser?'
+        required: true
+        type: boolean
+        default: true
+      use_opt_patches:
+        description: 'Do you want to add optimization patches in kernel?'
+        required: true
+        type: boolean
+        default: true
+      use_susfs:
+        description: 'Do you want to add susfs in kernel?'
+        required: true
+        type: boolean
+        default: true
       ksun_branch:
         description: 'Enter KernelSU Next Branch or commit hash (blank for stable tag)'
         required: true
@@ -38,21 +69,57 @@ on:
         type: choice
         options: [O2, O3]
         default: O2
+      lto:
+        description: "Link Time Optimization level"
+        required: true
+        type: choice
+        options: [Thin, Full]
+        default: Full
+      clang_version:
+        description: "Select Compiler version"
+        required: true
+        type: choice
+        options:
+          - default
+          - aosp-clang-3289846
+          - aosp-clang-r547379
+          - aosp-clang-r563880
+          - aosp-clang-r563880c
+          - aosp-clang-r574158
+        default: 'default'
       kernel_uname:
         description: 'Kernel uname'
         type: string
-        default: 'EmberHeart'
+        default: ''
       susfs_branch_or_commit:
         description: 'Enter SusFS Branch or commit hash'
         type: string
         default: ''
+      vendor_branch_or_commit:
+        description: 'Enter vendor modules and device tree branch or commit hash'
+        type: string
+        default: ''
+      common_branch_or_commit:
+        description: 'Enter COMMON kernel branch or commit hash'
+        type: string
+        default: ''
+      msm_branch_or_commit:
+        description: 'Enter MSM kernel branch or commit hash'
+        type: string
+        default: ''
+      compile_dlkm:
+        description: '[Under Testing dont use] Do you want to use vendor dlkm and boot partitions?'
+        required: true
+        type: boolean
+        default: false
       model:
         description: 'Select device to be built'
         required: true
         type: choice
         options:
-          - OP11R
-        default: OP11R
+          - OP11
+          - OP11_LOS
+        default: OP11
 
 jobs:
   set-op-model:
@@ -106,15 +173,35 @@ jobs:
           echo "$wrapped" >> "$GITHUB_OUTPUT"
           echo "MATRIX_EOF" >> "$GITHUB_OUTPUT"
 
-  build-kernel:
-    name: Build ${{ matrix.model }} EmberHeart kernel
+  build:
+    name: Build ${{ matrix.model }} EmberHeart
     needs: set-op-model
     runs-on: ubuntu-latest
+    outputs:
+      kernel_version: ${{ steps.build_kernel.outputs.kernel_version }}
+      ksun_version: ${{ steps.build_kernel.outputs.ksun_version }}
+      ksun_tag: ${{ steps.build_kernel.outputs.ksun_tag }}
+      susfs_version: ${{ steps.build_kernel.outputs.susfs_version }}
+      kernel_sha256: ${{ steps.build_kernel.outputs.kernel_sha256 }}
+      boot_sha256: ${{ steps.build_kernel.outputs.boot_sha256 }}
+      system_dlkm_sha256: ${{ steps.build_kernel.outputs.system_dlkm_sha256 }}
+      vendor_boot_sha256:  ${{ steps.build_modules.outputs.vendor_boot_sha256 }}
+      vendor_dlkm_sha256: ${{ steps.build_modules.outputs.vendor_dlkm_sha256 }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      BUILD_TYPE: ${{ inputs.build_target }}
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: "content"
       CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
+      CCACHE_DEPEND: "true"
+      CCACHE_IGNOREOPTIONS: "--sysroot*"
+      CCACHE_DIRECT: "true"
+      CCACHE_FILECLONE: "true"
+      CCACHE_INODE_CACHE: "true"
+      CCACHE_UMASK: "002"
+      CCACHE_SLOPPINESS: "file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale,modules"
+      CCACHE_IS_KERNEL_COMPILING: "true"
+      CCACHE_LOGFILE: "/tmp/kernel_ccache.log"
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
@@ -123,47 +210,56 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Setup Build Environment
+        id: setup_env
+        uses: ./.github/env_setup
+        with:
+          op_config_json: ${{ toJSON(matrix) }}
+          manifest: ${{ inputs.manifest }}
+          use_custom_repo_parser: ${{ inputs.use_custom_repo_parser }}
+          clang_version: ${{ inputs.clang_version }}
+          common_branch_or_commit: ${{ inputs.common_branch_or_commit }}
+          msm_branch_or_commit: ${{ inputs.msm_branch_or_commit }}
+          vendor_branch_or_commit: ${{ inputs.vendor_branch_or_commit }}
+          optimize_level: ${{ inputs.optimize_level }}
 
       - name: Build Kernel
+        id: build_kernel
+        if: contains(fromJSON('["Kernel Only", "Mixed Build", "Monolithic Build"]'), inputs.build_target)
         uses: ./.github/kernel
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.kernel_ccache
+          LDCACHE_DIR: ${{ github.workspace }}/.kernel_lto_cache
         with:
-          op_config_json: ${{ toJSON(matrix) }}
           ksun_branch_or_hash: ${{ inputs.ksun_branch }}
+          evict_unused_ccache: ${{ inputs.evict_unused_ccache }}
+          use_opt_patches: ${{ inputs.use_opt_patches }}
+          use_susfs: ${{ inputs.use_susfs }}
           susfs_commit_hash_or_branch: ${{ inputs.susfs_branch_or_commit }}
           optimize_level: ${{ inputs.optimize_level }}
+          lto: ${{ inputs.lto }}
           kernel_uname: ${{ inputs.kernel_uname }}
-          manifest: ${{ inputs.manifest }}
-
-  build-kernel-modules:
-    name: Build ${{ matrix.model }} Kernel Modules
-    needs: set-op-model
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+          compile_dlkm: ${{ inputs.compile_dlkm }}
 
       - name: Build Kernel Modules
+        id: build_modules
+        if: contains(fromJSON('["Modules Only", "Mixed Build", "Monolithic Build"]'), inputs.build_target)
         uses: ./.github/kernel_modules
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.modules_ccache
+          LDCACHE_DIR: ${{ github.workspace }}/.modules_lto_cache
         with:
-          op_config_json: ${{ toJSON(matrix) }}
-          manifest: ${{ inputs.manifest }}
+          optimize_level: ${{ inputs.optimize_level }}
+          lto: ${{ inputs.lto }}
+          evict_unused_ccache: ${{ inputs.evict_unused_ccache }}
+          compile_dlkm: ${{ inputs.compile_dlkm }}
 
   trigger-release:
     needs:
-      - build-kernel
-      - build-kernel-modules
+      - build
     runs-on: ubuntu-latest
-    if: ${{ inputs.release_type != 'none' }}
+    if: ${{ inputs.release_type != 'none' && contains(fromJSON('["Mixed Build", "Monolithic Build"]'), inputs.build_target) }}
     env:
       REPO_OWNER: ${{ github.repository_owner }}
       REPO_NAME: ${{ github.event.repository.name }}
@@ -214,12 +310,16 @@ jobs:
           if [ -z "$DEVICE" ]; then
              DEVICE="${{ inputs.model }}"
           fi
-          RELEASE_NAME="$DEVICE EmberHeart Kernel With KernelSU Next, Nethunter & SUSFS v2.1.0"
+          if [[ -n "${{ needs.build-kernel.outputs.susfs_version }}" ]]; then
+            RELEASE_NAME="$DEVICE EmberHeart Kernel With KernelSU Next ${{ needs.build-kernel.outputs.ksun_tag }}, Nethunter & SUSFS ${{ needs.build-kernel.outputs.susfs_version }}"
+          else
+            RELEASE_NAME="$DEVICE EmberHeart Kernel With KernelSU Next ${{ needs.build-kernel.outputs.ksun_tag }} & Nethunter"
+          fi
           echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
 
       - name: Generate and Create New Tag
         run: |
-          BASE_TAG="v2.1.0-r0"
+          BASE_TAG="${{ needs.build-kernel.outputs.ksun_tag }}-r0"
           LATEST_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name')
           if [ -z "$LATEST_TAG" ]; then
             LATEST_TAG="$BASE_TAG"
@@ -241,24 +341,34 @@ jobs:
         id: generate-notes
         run: |
           echo "=== Start building the release notes ==="
-          cat << EOF > release_notes.md
-          This release contains KernelSU Next and SUSFS v2.1.0
           
-          Module: 
-          -> https://github.com/sidex15/ksu_module_susfs  
-          
+          if [[ -n "${{ needs.build-kernel.outputs.susfs_version }}" ]]; then
+            cat << EOF > release_notes.md
+          This release contains KernelSU Next ${{ needs.build-kernel.outputs.ksun_tag }}, Nethunter and SUSFS ${{ needs.build-kernel.outputs.susfs_version }}
+
+          Module:
+          -> https://github.com/sidex15/ksu_module_susfs
+          EOF
+          else
+            cat << EOF > release_notes.md
+          This release contains KernelSU Next ${{ needs.build-kernel.outputs.ksun_tag }} & Nethunter
+          EOF
+          fi
+
+          cat << EOF >> release_notes.md
+
           Official Managers:
           -> https://github.com/KernelSU-Next/KernelSU-Next  
-          
+
           Non-Official Managers:
           -> https://github.com/WildKernels/Wild_KSU
-          
+
           ### Built Devices
-          
+
           | Model | Kernel Version |
           |-------|----------------|
           EOF
-          
+
           # Generate table rows
           find downloaded-artifacts -name "*.txt" -type f | sort | while read -r file; do
             if [ -n "$file" ]; then
@@ -267,13 +377,21 @@ jobs:
               printf "| %-12s | %-16s |\n" "$model" "$version" >> release_notes.md
             fi
           done
-          
+
           # Add features and finalize
-          cat << 'EOF' >> release_notes.md
-          
+          cat << EOF >> release_notes.md
+
           ### Features
-          - [+] KernelSU-Next / WildKSU Manager Support
-          - [+] SUSFS v2.1.0
+          - [+] KernelSU-Next ${{ needs.build-kernel.outputs.ksun_tag }} ( ${{ needs.build-kernel.outputs.ksun_version }} )
+          EOF
+
+          if [[ -n "${{ needs.build-kernel.outputs.susfs_version }}" ]]; then
+            cat << EOF >> release_notes.md
+          - [+] SUSFS ${{ needs.build-kernel.outputs.susfs_version }}
+          EOF
+          fi
+
+          cat << EOF >> release_notes.md
           - [+] Wireguard Support
           - [+] Magic Mount Support
           - [+] Ptrace message leak fix for kernels < 5.16
@@ -285,8 +403,15 @@ jobs:
           - [+] Mem kernel driver by @Poko-Apps [r/w to physical memory]
           - [+] IP Set Support
 
+          > [!IMPORTANT]
+          > Kernel Image hash : ${{ needs.build-kernel.outputs.kernel_sha256 }}
+          > boot.img hash : ${{ needs.build-kernel.outputs.boot_sha256 }}
+          > system_dlkm.img hash : ${{ needs.build-kernel.outputs.system_dlkm_sha256 }}
+          > vendor_boot.img hash : ${{ needs.build-kernel-modules.outputs.vendor_boot_sha256 }}
+          > vendor_dlkm.img hash : ${{ needs.build-kernel-modules.outputs.vendor_dlkm_sha256 }}
+
           EOF
-          
+
           # Output for debugging
           echo "--- Final Release Notes ---"
           cat release_notes.md
