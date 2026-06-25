@@ -177,11 +177,29 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-        
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
+          
+        # Ralink drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_RALINK \
+          --module CONFIG_RT2X00 \
+          --module CONFIG_RT2X00_LIB \
+          --enable CONFIG_RT2X00_LIB_FIRMWARE \
+          --module CONFIG_RT2X00_USB \
+          --module CONFIG_RT2X00_PCI \
+          --module CONFIG_RT2800LIB \
+          --module CONFIG_RT2800USB \
+          --enable CONFIG_RT2800USB_RT33XX \
+          --enable CONFIG_RT2800USB_RT35XX \
+          --enable CONFIG_RT2800USB_RT3573 \
+          --enable CONFIG_RT2800USB_RT53XX \
+          --enable CONFIG_RT2800USB_RT55XX \
+          --enable CONFIG_RT2800USB_UNKNOWN
 
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -200,21 +218,14 @@ runs:
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
           --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
           --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E
-
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921U
+        
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_MAC80211_LEDS \
+          --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
     - name: Add my kernel patches to msm kernel
@@ -237,16 +248,36 @@ runs:
         cd "$MSM"
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M mem-kernel
 
-    - name: Add rtw88 modules
+    # - name: Add rtw88 modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     cd "$MSM/drivers/net/wireless/realtek/"
+    #     rm -rf rtw88
+    #     git clone https://github.com/lwfinger/rtw88.git
+    #     sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+    #     sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
+    
+    - name: Add mt76 modules
       shell: bash
       run: |
         set -euo pipefail
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/"
+        rm -rf mediatek/* 
+        git clone -b mediatek https://github.com/docdry0001/mt7921.git mediatek/
 
+    - name: Add rtl88xxau modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtlwifi/* 
+        git clone https://github.com/docdry0001/rtl8812au.git rtlwifi/
+        
     - name: Add Build based configs
       if: ${{ env.BUILD_TYPE != 'Monolithic Build' }}
       shell: bash
