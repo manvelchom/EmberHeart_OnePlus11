@@ -18,6 +18,7 @@ on:
         type: choice
         options:
           - OOS15
+          - OOS14
           - OOS16
           - android12-5.10
         default: OOS16
