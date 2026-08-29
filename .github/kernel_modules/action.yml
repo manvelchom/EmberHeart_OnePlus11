@@ -431,6 +431,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
         rm -rf rtw88
         git clone https://github.com/lwfinger/rtw88.git
