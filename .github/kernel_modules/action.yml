@@ -255,6 +255,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/mediatek/"
         rm -rf mt76/*
         git clone -b next https://github.com/manvelchom/mt76.git  
